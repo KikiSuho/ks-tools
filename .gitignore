@@ -1,0 +1,141 @@
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+develop-eggs/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+.installed.cfg
+MANIFEST
+.pybuilder/
+target/
+
+# ============================================================
+# Virtual Environments
+# ============================================================
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+__pypackages__/
+
+# ============================================================
+# Testing & Coverage
+# ============================================================
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# ============================================================
+# Type Checkers & Linters
+# ============================================================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+cython_debug/
+
+# ============================================================
+# IDEs & Editors
+# ============================================================
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+.spyderproject
+.spyproject
+.ropeproject
+
+# ============================================================
+# AI & Automation Tools
+# ============================================================
+.claude/
+.cursor/
+.cursorignore
+.cursorindexingignore
+memory/
+
+# ============================================================
+# Logs
+# ============================================================
+logs/
+*.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ============================================================
+# OS Files
+# ============================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+
+# ============================================================
+# Packaging & Config Tools
+# ============================================================
+.pdm.toml
+.pdm-python
+.pdm-build/
+.pypirc
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+celerybeat-schedule
+celerybeat.pid
+*.sage.py
+*.spec
+*.manifest
+
+# ============================================================
+# Docs Build
+# ============================================================
+docs/_build/
+/site
+
+# ============================================================
+# Misc
+# ============================================================
+*.mo
+*.pot
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
+.scrapy
