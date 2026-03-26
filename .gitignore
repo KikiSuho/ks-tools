@@ -139,3 +139,4 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 .scrapy
+python_standards.md
