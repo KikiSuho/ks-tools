@@ -163,9 +163,9 @@ class UserDefaults:
 
     # pyproject.toml generation
     SCR_GENERATE_CONFIG: bool = True
-    SCR_OVERRIDE_CONFIG: bool = True
+    SCR_OVERRIDE_CONFIG: bool = False
     SCR_GENERATE_CONFIG_IN_CWD: bool = False
-    SCR_INCLUDE_TEST_CONFIG: bool = True
+    SCR_INCLUDE_TEST_CONFIG: bool = False
     SCR_INCLUDE_TEST_PLUGINS: bool = False
     SCR_PYPROJECT_ONLY: bool = False
 

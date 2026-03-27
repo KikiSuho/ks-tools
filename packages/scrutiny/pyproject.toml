@@ -5,16 +5,51 @@ requires = [
 build-backend = "hatchling.build"
 
 [project]
-name = "scrutiny"
-version = "0.1.0"
+name = "ks-scrutiny"
+version = "3.1.2"
 description = "Unified code quality orchestration; linters, formatters, type checkers, and security analyzers in one CLI"
+readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
+authors = [
+    { name = "KikiSuho", email = "suho@kikisuho.com" },
+]
+keywords = [
+    "code quality",
+    "linting",
+    "formatting",
+    "type checking",
+    "security",
+    "ruff",
+    "mypy",
+    "bandit",
+    "radon",
+    "cli",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "tomli>=1.1.0; python_version < '3.11'",
     "tomli-w>=1.0.0",
     "psutil>=5.9.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/KikiSuho/ks-tools"
+Repository = "https://github.com/KikiSuho/ks-tools"
+Issues = "https://github.com/KikiSuho/ks-tools/issues"
 
 [project.optional-dependencies]
 ruff = ["ruff>=0.4.0"]
@@ -22,13 +57,13 @@ mypy = ["mypy>=1.0"]
 radon = ["radon>=6.0"]
 bandit = ["bandit>=1.7"]
 all = [
-    "scrutiny[ruff]",
-    "scrutiny[mypy]",
-    "scrutiny[radon]",
-    "scrutiny[bandit]",
+    "ks-scrutiny[ruff]",
+    "ks-scrutiny[mypy]",
+    "ks-scrutiny[radon]",
+    "ks-scrutiny[bandit]",
 ]
 dev = [
-    "scrutiny[all]",
+    "ks-scrutiny[all]",
     "pytest>=7.0",
     "pytest-cov",
 ]
@@ -39,6 +74,14 @@ scrutiny = "scrutiny.main:main"
 [tool.hatch.build.targets.wheel]
 packages = [
     "src/scrutiny",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "tests/",
+    "README.md",
+    "LICENSE",
 ]
 
 [tool.pytest.ini_options]
