@@ -2,352 +2,353 @@ tools/
 ├── docs/
 │   ├── python_standards.md
 │   └── tools_structure.txt
-└── packages/
-    ├── scrutiny/
-    │   ├── docs/
-    │   │   ├── dev/
-    │   │   │   ├── api.md
-    │   │   │   └── architecture.md
-    │   │   ├── cli.md
-    │   │   └── configuration.md
-    │   ├── src/
-    │   │   └── scrutiny/ [pkg] [cmd]
-    │   │       ├── configs/ [pkg]
-    │   │       │   ├── dataclasses.py {802}
-    │   │       │   │   ├── @dataclass(frozen=True)
-    │   │       │   │   │   └── class GlobalConfig  :240
-    │   │       │   │   │       ├── def get_enabled_tools(context: ContextDetection) -> list[str]  :462
-    │   │       │   │   │       ├── def get_active_security_tool(context: ContextDetection) -> SecurityTool  :500
-    │   │       │   │   │       └── @property
-    │   │       │   │   │           └── def effective_fix() -> bool  :524
-    │   │       │   │   ├── @dataclass(frozen=True)
-    │   │       │   │   │   └── class RuffConfig(_ToolConfigMixin)  :570
-    │   │       │   │   ├── @dataclass(frozen=True)
-    │   │       │   │   │   └── class MypyConfig(_ToolConfigMixin)  :635
-    │   │       │   │   ├── @dataclass(frozen=True)
-    │   │       │   │   │   └── class RadonConfig(_ToolConfigMixin)  :705
-    │   │       │   │   └── @dataclass(frozen=True)
-    │   │       │   │       └── class BanditConfig(_ToolConfigMixin)  :758
-    │   │       │   ├── pyproject.py {876}
-    │   │       │   │   ├── class PyProjectLoader  :63
-    │   │       │   │   │   ├── @staticmethod
-    │   │       │   │   │   │   └── def find_pyproject_toml(start_path: Path, max_depth: int) -> Optional[Path]  :74
-    │   │       │   │   │   ├── @staticmethod
-    │   │       │   │   │   │   └── def load_from_path(pyproject_path: Path) -> dict[str, Any]  :119
-    │   │       │   │   │   ├── @staticmethod
-    │   │       │   │   │   │   └── def extract_tool_config(pyproject_data: dict[str, Any], tool_name: str) -> dict[str, Any]  :165
-    │   │       │   │   │   └── @staticmethod
-    │   │       │   │   │       └── def map_to_internal_keys(tool_name: str, native_config: dict[str, Any]) -> dict[str, Any]  :202
-    │   │       │   │   └── class PyProjectGenerator  :236
-    │   │       │   │       └── @staticmethod
-    │   │       │   │           └── def generate_or_merge(project_root: Path, global_config: GlobalConfig) -> str  :287
-    │   │       │   └── resolver.py {1060}
-    │   │       │       ├── class ContextDetection(Enum)  :273
-    │   │       │       │   ├── @classmethod
-    │   │       │       │   │   └── def detect() -> ContextDetection  :296
-    │   │       │       │   ├── @classmethod
-    │   │       │       │   │   └── def get_console_logger_level(context: ContextDetection, snapshot: UserDefaultsSnapshot) -> LoggerLevel  :418
-    │   │       │       │   ├── @classmethod
-    │   │       │       │   │   └── def should_create_log(context: ContextDetection, snapshot: UserDefaultsSnapshot) -> bool  :445
-    │   │       │       │   └── @classmethod
-    │   │       │       │       └── def should_check_only(context: ContextDetection, snapshot: UserDefaultsSnapshot) -> bool  :472
-    │   │       │       ├── @dataclass(frozen=True)
-    │   │       │       │   └── class EffectiveValue  :505
-    │   │       │       └── class ConfigResolver  :527
-    │   │       │           ├── @handle_errors
-    │   │       │           │   └── def resolve(cli_key: Optional[str], pyproject_tool: Optional[str], pyproject_key: Optional[str], context_value: Optional[Any], script_default: Optional[Any], tool_default: Optional[Any]) -> EffectiveValue  :619
-    │   │       │           ├── @handle_errors
-    │   │       │           │   └── def build_global_config() -> GlobalConfig  :739
-    │   │       │           ├── @handle_errors
-    │   │       │           │   └── def build_ruff_config(global_config: GlobalConfig) -> RuffConfig  :805
-    │   │       │           ├── @handle_errors
-    │   │       │           │   └── def build_mypy_config(global_config: GlobalConfig) -> MypyConfig  :885
-    │   │       │           ├── @handle_errors
-    │   │       │           │   └── def build_radon_config(global_config: GlobalConfig) -> RadonConfig  :972
-    │   │       │           ├── @handle_errors
-    │   │       │           │   └── def build_bandit_config(global_config: GlobalConfig) -> BanditConfig  :1000
-    │   │       │           └── @handle_errors
-    │   │       │               └── def build_ruff_security_config(global_config: GlobalConfig) -> RuffConfig  :1035
-    │   │       ├── core/ [pkg]
-    │   │       │   ├── cli.py {711}
-    │   │       │   │   ├── @handle_errors
-    │   │       │   │   │   └── def create_argument_parser() -> argparse.ArgumentParser  :41
-    │   │       │   │   ├── def cli_dict_to_flags(cli_dict: dict[str, Any]) -> tuple[str, ...]  :425
-    │   │       │   │   ├── @handle_errors
-    │   │       │   │   │   └── def run_doctor() -> int  :479
-    │   │       │   │   └── def parse_cli_to_dict(args: argparse.Namespace) -> dict[str, Any]  :658
-    │   │       │   ├── enums.py {297}
-    │   │       │   │   ├── class ConfigTier(Enum)  :35
-    │   │       │   │   ├── class SecurityTool(Enum)  :60
-    │   │       │   │   ├── class LogLocation(str, Enum)  :77
-    │   │       │   │   ├── class LoggerLevel(IntEnum)  :98
-    │   │       │   │   ├── class PythonVersion(str, Enum)  :123
-    │   │       │   │   │   └── @property
-    │   │       │   │   │       └── def to_dotted() -> str  :152
-    │   │       │   │   ├── class LineLength(IntEnum)  :165
-    │   │       │   │   ├── class SearchDepth(IntEnum)  :188
-    │   │       │   │   ├── class ToolTimeout(IntEnum)  :211
-    │   │       │   │   ├── class FrameworkSelection(str, Enum)  :237
-    │   │       │   │   └── class ConfigSource(Enum)  :269
-    │   │       │   ├── exceptions.py {372}
-    │   │       │   │   ├── class ExitCode(IntEnum)  :42
-    │   │       │   │   ├── class SCRError(Exception)  :86
-    │   │       │   │   ├── class SCRSystemError(SCRError)  :113
-    │   │       │   │   ├── class SCRProjectRootError(SCRError)  :130
-    │   │       │   │   ├── class SCRToolExecutionError(SCRError)  :147
-    │   │       │   │   ├── class SCRTimeoutError(SCRToolExecutionError)  :172
-    │   │       │   │   ├── class SCRUserInputError(SCRError)  :199
-    │   │       │   │   ├── class SCRConfigurationError(SCRError)  :216
-    │   │       │   │   ├── class SCRLoggerError(SCRError)  :233
-    │   │       │   │   ├── class SCRLoggerLevelError(SCRLoggerError)  :250
-    │   │       │   │   ├── class SCRLoggerFileError(SCRLoggerError)  :265
-    │   │       │   │   ├── class SCRUnexpectedError(SCRError)  :280
-    │   │       │   │   ├── /wrapper\ def handle_errors(func: _FuncT) -> _FuncT  :313
-    │   │       │   │   └── def format_scr_error(error: SCRError) -> str  :354
-    │   │       │   └── tool_data.py {626}
-    │   │       │       ├── def get_test_config_tier(config_tier: ConfigTier) -> str  :433
-    │   │       │       └── def build_ruff_rules(tier: ConfigTier, framework: FrameworkSelection, python_version: PythonVersion, run_mypy: bool) -> tuple[tuple[str, ...], tuple[str, ...]]  :494
-    │   │       ├── execution/ [pkg]
-    │   │       │   ├── handlers.py {1391}
-    │   │       │   │   ├── class BaseToolHandler  :95
-    │   │       │   │   │   ├── def run(files: list[Path], tool_config: Any, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :284
-    │   │       │   │   │   └── def build_command(files: list[Path], tool_config: Any, global_config: GlobalConfig, effective_root: Path) -> list[str]  :313
-    │   │       │   │   ├── class RuffHandler(BaseToolHandler)  :348
-    │   │       │   │   │   ├── @handle_errors
-    │   │       │   │   │   │   └── def run(files: list[Path], ruff_config: RuffConfig, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :362
-    │   │       │   │   │   └── @handle_errors
-    │   │       │   │   │       └── def build_command(files: list[Path], ruff_config: RuffConfig, _global_config: GlobalConfig, _effective_root: Path, fix_mode: bool) -> list[str]  :533
-    │   │       │   │   ├── class RuffFormatterHandler(BaseToolHandler)  :624
-    │   │       │   │   │   ├── @handle_errors
-    │   │       │   │   │   │   └── def run(files: list[Path], ruff_config: RuffConfig, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :632
-    │   │       │   │   │   └── @handle_errors
-    │   │       │   │   │       └── def build_command(files: list[Path], ruff_config: RuffConfig, global_config: GlobalConfig, _effective_root: Path) -> list[str]  :674
-    │   │       │   │   ├── class MypyHandler(BaseToolHandler)  :721
-    │   │       │   │   │   ├── @handle_errors
-    │   │       │   │   │   │   └── def run(files: list[Path], mypy_config: MypyConfig, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :725
-    │   │       │   │   │   └── @handle_errors
-    │   │       │   │   │       └── def build_command(files: list[Path], mypy_config: MypyConfig, global_config: GlobalConfig, _effective_root: Path) -> list[str]  :770
-    │   │       │   │   ├── class RadonCCHandler(BaseToolHandler)  :882
-    │   │       │   │   │   ├── @handle_errors
-    │   │       │   │   │   │   └── def run(files: list[Path], radon_config: RadonConfig, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :886
-    │   │       │   │   │   ├── @handle_errors
-    │   │       │   │   │   │   └── def build_command(files: list[Path], radon_config: RadonConfig, _global_config: GlobalConfig, _effective_root: Path) -> list[str]  :969
-    │   │       │   │   │   └── @handle_errors
-    │   │       │   │   │       └── def compute_maintainability_index(files: list[Path], effective_root: Path) -> dict[str, str]  :1102
-    │   │       │   │   ├── class BanditHandler(BaseToolHandler)  :1152
-    │   │       │   │   │   ├── @handle_errors
-    │   │       │   │   │   │   └── def run(files: list[Path], bandit_config: BanditConfig, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :1156
-    │   │       │   │   │   └── @handle_errors
-    │   │       │   │   │       └── def build_command(files: list[Path], bandit_config: BanditConfig, _global_config: GlobalConfig, _effective_root: Path) -> list[str]  :1210
-    │   │       │   │   └── class ToolExecutor  :1298
-    │   │       │   │       └── @handle_errors
-    │   │       │   │           └── def run_tool(tool_name: str, files: list[Path], tool_config: Any, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :1360
-    │   │       │   ├── issues.py {175}
-    │   │       │   │   ├── class RuffIssue  :27
-    │   │       │   │   └── class BanditIssue  :80
-    │   │       │   │       └── def meets_threshold(min_severity: str, min_confidence: str) -> bool  :136
-    │   │       │   ├── results.py {105}
-    │   │       │   │   ├── @dataclass
-    │   │       │   │   │   └── class ToolResult  :28
-    │   │       │   │   └── @dataclass
-    │   │       │   │       └── class ResultTotals  :79
-    │   │       │   └── services.py {598}
-    │   │       │       ├── class ProjectRootService  :99
-    │   │       │       │   ├── @staticmethod
-    │   │       │       │   │   └── def get_project_root(start_path: Path, global_config: GlobalConfig) -> Path  :133
-    │   │       │       │   ├── @staticmethod
-    │   │       │       │   │   └── def get_actual_project_root(start_path: Path, global_config: GlobalConfig) -> Path  :167
-    │   │       │       │   └── @staticmethod
-    │   │       │       │       └── def search_upward(start: Path, max_depth: int, follow_symlinks: bool) -> Path  :245
-    │   │       │       ├── class FileDiscoveryService  :375
-    │   │       │       │   └── @staticmethod
-    │   │       │       │       └── def discover_files(paths: list[Path], global_config: GlobalConfig, tool_exclusions: tuple[str, ...]) -> list[Path]  :384
-    │   │       │       ├── def clear_tool_caches(root: Path, logger: SCRLogger) -> None  :344
-    │   │       │       └── @functools.cache
-    │   │       │           └── def which(command_name: str) -> Optional[str]  :543
-    │   │       ├── output/ [pkg]
-    │   │       │   ├── formatting.py {829}
-    │   │       │   │   ├── class SourceReader  :50
-    │   │       │   │   │   ├── @classmethod
-    │   │       │   │   │   │   └── def clear_cache() -> None  :68
-    │   │       │   │   │   └── @classmethod
-    │   │       │   │   │       └── def read_source_context(file_path: str, line_number: int, context_lines: int) -> list[str]  :73
-    │   │       │   │   ├── class OutputFormatter  :125
-    │   │       │   │   │   ├── @staticmethod
-    │   │       │   │   │   │   └── def generate_summary(tool_name: str, files_processed: int, issues_found: int, issues_fixed: int, execution_time: float, extra_metrics: Optional[dict[str, Any]]) -> str  :146
-    │   │       │   │   │   ├── @staticmethod
-    │   │       │   │   │   │   └── def generate_error_summary(tool_name: str, error_message: str, execution_time: float) -> str  :200
-    │   │       │   │   │   ├── @staticmethod
-    │   │       │   │   │   │   └── def format_tool_issues(tool_name: str, tool_data: dict[str, Any], effective_root: Path, *, show_metadata: bool, show_source: bool, show_fixed: bool) -> str  :537
-    │   │       │   │   │   ├── @staticmethod
-    │   │       │   │   │   │   └── def format_at_level(tool_name: str, tool_data: dict[str, Any], level: LoggerLevel, effective_root: Path) -> str  :588
-    │   │       │   │   │   └── @staticmethod
-    │   │       │   │   │       └── def get_tool_context(tool_name: str, tool_config: Any) -> tuple[str, str]  :710
-    │   │       │   │   └── def format_and_log_tool_output(logger: SCRLogger, tool_name: str, tool_data: dict[str, Any], effective_root: Path) -> None  :771
-    │   │       │   ├── header.py {356}
-    │   │       │   │   └── def print_header(logger: SCRLogger, global_config: GlobalConfig, context: ContextDetection, effective_root: Path, tool_names: list[str], file_count: int, discovered_files: Optional[list[Path]], log_discovered_files: bool, mi_ranks: Optional[dict[str, str]], gen_status: Optional[str], cli_overrides: tuple[str, ...], pyproject_has_config: bool) -> None  :256
-    │   │       │   ├── logger.py {610}
-    │   │       │   │   ├── class DeferredLogBuffer  :47
-    │   │       │   │   │   ├── @classmethod
-    │   │       │   │   │   │   └── def capture(level: str, message: str) -> None  :67
-    │   │       │   │   │   ├── @classmethod
-    │   │       │   │   │   │   └── def flush(logger: Any) -> None  :83
-    │   │       │   │   │   ├── @classmethod
-    │   │       │   │   │   │   └── def flush_or_stderr(logger: Optional[Any]) -> None  :108
-    │   │       │   │   │   └── @classmethod
-    │   │       │   │   │       └── def clear() -> None  :134
-    │   │       │   │   └── class SCRLogger  :140
-    │   │       │   │       ├── def status(status_text: str) -> None  :386
-    │   │       │   │       ├── def success(success_text: str) -> None  :398
-    │   │       │   │       ├── def error(error_text: str) -> None  :410
-    │   │       │   │       ├── def warning(warning_text: str) -> None  :423
-    │   │       │   │       ├── def result(result_text: str) -> None  :435
-    │   │       │   │       ├── def header(header_text: str) -> None  :447
-    │   │       │   │       ├── def issue(issue_text: str) -> None  :459
-    │   │       │   │       ├── def detail(detail_text: str) -> None  :472
-    │   │       │   │       ├── def info(info_text: str) -> None  :485
-    │   │       │   │       ├── def debug(debug_text: str) -> None  :497
-    │   │       │   │       ├── def write_split(console_text: Optional[str], file_text: Optional[str]) -> None  :509
-    │   │       │   │       ├── def log_tool_output(tool_name: str, tool_data: dict[str, Any], effective_root: Path) -> None  :548
-    │   │       │   │       ├── @handle_errors
-    │   │       │   │       │   └── def close() -> None  :577
-    │   │       │   │       └── def get_log_info() -> dict[str, Any]  :594
-    │   │       │   ├── reporting.py {208}
-    │   │       │   │   ├── @handle_errors
-    │   │       │   │   │   └── def determine_exit_code(results: list[ToolResult]) -> int  :107
-    │   │       │   │   └── def report_final_status(results: list[ToolResult], discovered_files: list[Path], logger: SCRLogger) -> int  :147
-    │   │       │   └── run_logging.py {193}
-    │   │       │       └── def log_completed_result(tool_name: str, result: ToolResult, tool_config_map: dict[str, Any], logger: SCRLogger, effective_root: Path) -> None  :127
-    │   │       ├── platforms/ [pkg]
-    │   │       │   ├── linux.py {205}
-    │   │       │   │   ├── def get_pathext() -> list[str]  :103
-    │   │       │   │   ├── def get_extra_search_dirs(_interpreter_dir: str) -> list[str]  :108
-    │   │       │   │   ├── def get_subprocess_creation_flags() -> int  :137
-    │   │       │   │   ├── def get_subprocess_preexec_fn() -> Optional[Callable[[], None]]  :142
-    │   │       │   │   ├── def safe_rmtree(directory: Path) -> None  :163
-    │   │       │   │   └── def terminate_process_tree(pid: int) -> None  :184
-    │   │       │   ├── macos.py {206}
-    │   │       │   │   ├── def get_pathext() -> list[str]  :104
-    │   │       │   │   ├── def get_extra_search_dirs(_interpreter_dir: str) -> list[str]  :109
-    │   │       │   │   ├── def get_subprocess_creation_flags() -> int  :138
-    │   │       │   │   ├── def get_subprocess_preexec_fn() -> Optional[Callable[[], None]]  :143
-    │   │       │   │   ├── def safe_rmtree(directory: Path) -> None  :164
-    │   │       │   │   └── def terminate_process_tree(pid: int) -> None  :185
-    │   │       │   └── windows.py {206}
-    │   │       │       ├── def get_pathext() -> list[str]  :109
-    │   │       │       ├── def get_extra_search_dirs(interpreter_dir: str) -> list[str]  :114
-    │   │       │       ├── def get_subprocess_creation_flags() -> int  :142
-    │   │       │       ├── def get_subprocess_preexec_fn() -> Optional[Callable[[], None]]  :147
-    │   │       │       ├── def safe_rmtree(directory: Path) -> None  :169
-    │   │       │       └── def terminate_process_tree(pid: int) -> None  :191
-    │   │       ├── config.py {360}
-    │   │       │   ├── class UserDefaults  :38
-    │   │       │   │   └── @classmethod
-    │   │       │   │       └── def to_frozen() -> UserDefaultsSnapshot  :184
-    │   │       │   └── @dataclass(frozen=True)
-    │   │       │       └── class UserDefaultsSnapshot  :234
-    │   │       └── main.py {1271}
-    │   │           └── @handle_errors
-    │   │               └── def main() -> int  :1191
-    │   │                   └── calls: create_argument_parser -> parse_args
-    │   └── README.md
-    └── trellis/
-        ├── docs/
-        │   ├── dev/
-        │   │   ├── api.md
-        │   │   └── architecture.md
-        │   ├── change-tracking.md
-        │   ├── cli.md
-        │   └── configuration.md
-        ├── src/
-        │   └── trellis/ [pkg] [cmd]
-        │       ├── core/ [pkg]
-        │       │   ├── filters.py {599}
-        │       │   │   ├── def should_skip_system_file(item: str) -> bool  :301
-        │       │   │   ├── def is_docs_directory_visible(directory_name: str, settings: FilterSettings) -> bool  :319
-        │       │   │   ├── def is_special_case_item(item_name: str, is_directory: bool, settings: FilterSettings) -> bool  :340
-        │       │   │   ├── def should_ignore_directory(directory_path: str, settings: FilterSettings) -> bool  :363
-        │       │   │   ├── def should_ignore_file(item_path: str, settings: FilterSettings) -> bool  :389
-        │       │   │   ├── def matches_ignored_file(file_path: str, settings: FilterSettings) -> bool  :419
-        │       │   │   ├── def directory_matches_pattern(directory_name: str, normalized_posix: str, pattern: str) -> bool  :441
-        │       │   │   ├── def matches_ignored_directory(path: str, settings: FilterSettings) -> bool  :469
-        │       │   │   ├── def is_path_filtered_by_flags(path: str, settings: FilterSettings) -> bool  :512
-        │       │   │   └── def is_path_in_ignored_hierarchy(path: str, path_ancestry: Sequence[str], settings: FilterSettings) -> bool  :549
-        │       │   ├── io.py {144}
-        │       │   │   └── def atomic_write_text(output_path: str, content: str) -> bool  :37
-        │       │   ├── persistence.py {455}
-        │       │   │   ├── class WriteStatus(Enum)  :51
-        │       │   │   ├── class PersistenceContext(NamedTuple)  :71
-        │       │   │   ├── class SaveResult(NamedTuple)  :116
-        │       │   │   ├── def save_structure(ctx: PersistenceContext) -> SaveResult  :144
-        │       │   │   └── def prepare_tree_content(project_name: str, structure: str) -> str  :303
-        │       │   └── project_root.py {346}
-        │       │       └── def find_project_root(start_path: _StartPath, markers: _MarkersInput, max_depth: int, follow_symlinks: bool, preference: Optional[Preference]) -> Optional[Path]  :261
-        │       ├── output/ [pkg]
-        │       │   └── console.py {647}
-        │       │       └── def format_change_summary(changes: StructureChanges, project_name: str, log_path: str, max_line_width: int) -> str  :598
-        │       ├── pyast/ [pkg]
-        │       │   ├── analyzer.py {822}
-        │       │   │   ├── @dataclass
-        │       │   │   │   └── class DecoratorInfo  :52
-        │       │   │   ├── def parse_python_file(file_path: str, source: Optional[str]) -> ast.Module  :77
-        │       │   │   ├── def extract_top_level_nodes(tree: ast.Module) -> tuple[list[ast.ClassDef], list[FunctionNode]]  :238
-        │       │   │   ├── def extract_class_inheritance(class_node: ast.ClassDef) -> str  :306
-        │       │   │   ├── def is_name_hidden(name: str, *, show_private: bool, show_mangled: bool, show_dunder: bool) -> bool  :354
-        │       │   │   ├── def format_function_signature(func_node: FunctionNode, *, include_types: bool, include_return_type: bool, include_defaults: bool) -> str  :448
-        │       │   │   ├── def extract_decorators(node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef]) -> list[DecoratorInfo]  :624
-        │       │   │   ├── def extract_top_level_calls(func_node: FunctionNode) -> list[str]  :747
-        │       │   │   └── def extract_imported_names(tree: ast.Module) -> frozenset[str]  :794
-        │       │   ├── call_flow.py {436}
-        │       │   │   ├── def format_call_flow_line(call_names: list[str], prefix: str, max_line_width: int, connector: str) -> str  :42
-        │       │   │   └── def filter_smart_calls(call_names: list[str], sibling_names: frozenset[str], imported_names: frozenset[str], is_hidden: _VisibilityPredicate) -> list[str]  :379
-        │       │   ├── renderer.py {813}
-        │       │   │   ├── class OutputSink(Protocol)  :59
-        │       │   │   │   └── def append(line: str) -> None  :68
-        │       │   │   ├── class RenderSettings(NamedTuple)  :74
-        │       │   │   ├── class AstRenderer  :147
-        │       │   │   │   ├── def render_python_structure(file_path: str, prefix: str, show_params: bool, source: Optional[str]) -> None  :183
-        │       │   │   │   └── def render_decorator_scaffolding(decorators: list[DecoratorInfo], prefix: str, connector: str, is_last_item: bool) -> str  :306
-        │       │   │   └── def build_render_settings(*, show_types: Optional[bool], show_decorators: Optional[bool], call_flow_mode: Optional[CallFlowMode], show_params: Optional[bool], max_line_width: Optional[int]) -> RenderSettings  :100
-        │       │   └── tree_drawing.py {42}
-        │       │       └── def get_tree_connectors(prefix: str, is_last_item: bool) -> tuple[str, str]  :21
-        │       ├── tracking/ [pkg]
-        │       │   ├── comparator.py {438}
-        │       │   │   ├── class ApiChange(NamedTuple)  :44
-        │       │   │   ├── class ApiEntry(NamedTuple)  :64
-        │       │   │   ├── class StructureChanges(NamedTuple)  :81
-        │       │   │   ├── def strip_lineno(element_line: str) -> str  :159
-        │       │   │   ├── def extract_lineno(element_line: str) -> str  :177
-        │       │   │   ├── def extract_signature_detail(element_line: str) -> str  :199
-        │       │   │   └── def compare_structure_elements(old_elements: dict[str, list[str]], new_elements: dict[str, list[str]], added_file_paths: list[str], removed_file_paths: list[str]) -> StructureChanges  :377
-        │       │   ├── detector.py {606}
-        │       │   │   ├── def format_tr_meta(meta: str) -> str  :53
-        │       │   │   ├── def parse_tr_meta_line(line: str) -> Optional[str]  :71
-        │       │   │   ├── def append_tr_meta(tree_content: str, meta: str) -> str  :117
-        │       │   │   ├── def split_tree_and_meta(content: str, project_name: str) -> tuple[str, Optional[str], str]  :139
-        │       │   │   ├── def detect_structure_changes(new_content: str, old_content: str, project_name: str, path_filter: Callable[[str, Sequence[str]], bool], settings: FilterSettings, collected_paths: Optional[tuple[frozenset[str], dict[str, tuple[str, ...]]]], old_tree_content: Optional[str]) -> tuple[list[str], list[str], bool]  :263
-        │       │   │   ├── def analyze_structure_paths(structure_text: str) -> tuple[set[str], dict[str, list[str]]]  :391
-        │       │   │   └── def analyze_structure_elements(structure_text: str) -> dict[str, list[str]]  :543
-        │       │   └── logger.py {62}
-        │       │       └── def log_structure_changes(logs_dir: str, content: str) -> str  :28
-        │       ├── config.py {566}
-        │       │   ├── class CallFlowMode(Enum)  :52
-        │       │   ├── class Config  :72
-        │       │   ├── class FilterSettings(NamedTuple)  :236
-        │       │   ├── class VisibilitySettings(NamedTuple)  :422
-        │       │   ├── def build_tr_meta(*, show_types: Optional[bool], show_decorators: Optional[bool], call_flow_mode: Optional[CallFlowMode], show_docs: Optional[bool], enable_ignore_dirs: Optional[bool], enable_ignore_files: Optional[bool], show_params: Optional[bool], show_private: Optional[bool], show_dunder: Optional[bool], show_mangled: Optional[bool]) -> str  :281
-        │       │   ├── def build_filter_settings(*, enable_ignore_dirs: Optional[bool], enable_ignore_files: Optional[bool], show_docs: Optional[bool], doc_extensions: Optional[frozenset[str]], output_dir: Optional[str], ignore_dirs: Optional[frozenset[str]], ignore_files: Optional[frozenset[str]], log_dir: Optional[str], log_structure_changes: Optional[bool], log_config_only_changes: Optional[bool]) -> FilterSettings  :353
-        │       │   └── def parse_visibility_args(argv: list[str]) -> VisibilitySettings  :487
-        │       └── main.py {795}
-        │           ├── class DirectoryStructure  :82
-        │           │   ├── @property
-        │           │   │   └── def structure() -> str  :192
-        │           │   ├── def append_line(line: str) -> None  :196
-        │           │   ├── def scan_directory(current_dir: str, prefix: str) -> None  :259
-        │           │   └── def save_structure() -> SaveResult  :619
-        │           └── def main() -> int  :674
-        │               └── calls: parse_visibility_args -> find_project_root -> scan_directory -> save_structure
-        └── README.md
+├── packages/
+│   ├── scrutiny/
+│   │   ├── docs/
+│   │   │   ├── dev/
+│   │   │   │   ├── api.md
+│   │   │   │   └── architecture.md
+│   │   │   ├── cli.md
+│   │   │   └── configuration.md
+│   │   ├── src/
+│   │   │   └── scrutiny/ [pkg] [cmd] [typed]
+│   │   │       ├── configs/ [pkg]
+│   │   │       │   ├── dataclasses.py {802}
+│   │   │       │   │   ├── @dataclass(frozen=True)
+│   │   │       │   │   │   └── class GlobalConfig  :240
+│   │   │       │   │   │       ├── def get_enabled_tools(context: ContextDetection) -> list[str]  :462
+│   │   │       │   │   │       ├── def get_active_security_tool(context: ContextDetection) -> SecurityTool  :500
+│   │   │       │   │   │       └── @property
+│   │   │       │   │   │           └── def effective_fix() -> bool  :524
+│   │   │       │   │   ├── @dataclass(frozen=True)
+│   │   │       │   │   │   └── class RuffConfig(_ToolConfigMixin)  :570
+│   │   │       │   │   ├── @dataclass(frozen=True)
+│   │   │       │   │   │   └── class MypyConfig(_ToolConfigMixin)  :635
+│   │   │       │   │   ├── @dataclass(frozen=True)
+│   │   │       │   │   │   └── class RadonConfig(_ToolConfigMixin)  :705
+│   │   │       │   │   └── @dataclass(frozen=True)
+│   │   │       │   │       └── class BanditConfig(_ToolConfigMixin)  :758
+│   │   │       │   ├── pyproject.py {876}
+│   │   │       │   │   ├── class PyProjectLoader  :63
+│   │   │       │   │   │   ├── @staticmethod
+│   │   │       │   │   │   │   └── def find_pyproject_toml(start_path: Path, max_depth: int) -> Optional[Path]  :74
+│   │   │       │   │   │   ├── @staticmethod
+│   │   │       │   │   │   │   └── def load_from_path(pyproject_path: Path) -> dict[str, Any]  :119
+│   │   │       │   │   │   ├── @staticmethod
+│   │   │       │   │   │   │   └── def extract_tool_config(pyproject_data: dict[str, Any], tool_name: str) -> dict[str, Any]  :165
+│   │   │       │   │   │   └── @staticmethod
+│   │   │       │   │   │       └── def map_to_internal_keys(tool_name: str, native_config: dict[str, Any]) -> dict[str, Any]  :202
+│   │   │       │   │   └── class PyProjectGenerator  :236
+│   │   │       │   │       └── @staticmethod
+│   │   │       │   │           └── def generate_or_merge(project_root: Path, global_config: GlobalConfig) -> str  :287
+│   │   │       │   └── resolver.py {1060}
+│   │   │       │       ├── class ContextDetection(Enum)  :273
+│   │   │       │       │   ├── @classmethod
+│   │   │       │       │   │   └── def detect() -> ContextDetection  :296
+│   │   │       │       │   ├── @classmethod
+│   │   │       │       │   │   └── def get_console_logger_level(context: ContextDetection, snapshot: UserDefaultsSnapshot) -> LoggerLevel  :418
+│   │   │       │       │   ├── @classmethod
+│   │   │       │       │   │   └── def should_create_log(context: ContextDetection, snapshot: UserDefaultsSnapshot) -> bool  :445
+│   │   │       │       │   └── @classmethod
+│   │   │       │       │       └── def should_check_only(context: ContextDetection, snapshot: UserDefaultsSnapshot) -> bool  :472
+│   │   │       │       ├── @dataclass(frozen=True)
+│   │   │       │       │   └── class EffectiveValue  :505
+│   │   │       │       └── class ConfigResolver  :527
+│   │   │       │           ├── @handle_errors
+│   │   │       │           │   └── def resolve(cli_key: Optional[str], pyproject_tool: Optional[str], pyproject_key: Optional[str], context_value: Optional[Any], script_default: Optional[Any], tool_default: Optional[Any]) -> EffectiveValue  :619
+│   │   │       │           ├── @handle_errors
+│   │   │       │           │   └── def build_global_config() -> GlobalConfig  :739
+│   │   │       │           ├── @handle_errors
+│   │   │       │           │   └── def build_ruff_config(global_config: GlobalConfig) -> RuffConfig  :805
+│   │   │       │           ├── @handle_errors
+│   │   │       │           │   └── def build_mypy_config(global_config: GlobalConfig) -> MypyConfig  :885
+│   │   │       │           ├── @handle_errors
+│   │   │       │           │   └── def build_radon_config(global_config: GlobalConfig) -> RadonConfig  :972
+│   │   │       │           ├── @handle_errors
+│   │   │       │           │   └── def build_bandit_config(global_config: GlobalConfig) -> BanditConfig  :1000
+│   │   │       │           └── @handle_errors
+│   │   │       │               └── def build_ruff_security_config(global_config: GlobalConfig) -> RuffConfig  :1035
+│   │   │       ├── core/ [pkg]
+│   │   │       │   ├── cli.py {711}
+│   │   │       │   │   ├── @handle_errors
+│   │   │       │   │   │   └── def create_argument_parser() -> argparse.ArgumentParser  :41
+│   │   │       │   │   ├── def cli_dict_to_flags(cli_dict: dict[str, Any]) -> tuple[str, ...]  :425
+│   │   │       │   │   ├── @handle_errors
+│   │   │       │   │   │   └── def run_doctor() -> int  :479
+│   │   │       │   │   └── def parse_cli_to_dict(args: argparse.Namespace) -> dict[str, Any]  :658
+│   │   │       │   ├── enums.py {297}
+│   │   │       │   │   ├── class ConfigTier(Enum)  :35
+│   │   │       │   │   ├── class SecurityTool(Enum)  :60
+│   │   │       │   │   ├── class LogLocation(str, Enum)  :77
+│   │   │       │   │   ├── class LoggerLevel(IntEnum)  :98
+│   │   │       │   │   ├── class PythonVersion(str, Enum)  :123
+│   │   │       │   │   │   └── @property
+│   │   │       │   │   │       └── def to_dotted() -> str  :152
+│   │   │       │   │   ├── class LineLength(IntEnum)  :165
+│   │   │       │   │   ├── class SearchDepth(IntEnum)  :188
+│   │   │       │   │   ├── class ToolTimeout(IntEnum)  :211
+│   │   │       │   │   ├── class FrameworkSelection(str, Enum)  :237
+│   │   │       │   │   └── class ConfigSource(Enum)  :269
+│   │   │       │   ├── exceptions.py {372}
+│   │   │       │   │   ├── class ExitCode(IntEnum)  :42
+│   │   │       │   │   ├── class SCRError(Exception)  :86
+│   │   │       │   │   ├── class SCRSystemError(SCRError)  :113
+│   │   │       │   │   ├── class SCRProjectRootError(SCRError)  :130
+│   │   │       │   │   ├── class SCRToolExecutionError(SCRError)  :147
+│   │   │       │   │   ├── class SCRTimeoutError(SCRToolExecutionError)  :172
+│   │   │       │   │   ├── class SCRUserInputError(SCRError)  :199
+│   │   │       │   │   ├── class SCRConfigurationError(SCRError)  :216
+│   │   │       │   │   ├── class SCRLoggerError(SCRError)  :233
+│   │   │       │   │   ├── class SCRLoggerLevelError(SCRLoggerError)  :250
+│   │   │       │   │   ├── class SCRLoggerFileError(SCRLoggerError)  :265
+│   │   │       │   │   ├── class SCRUnexpectedError(SCRError)  :280
+│   │   │       │   │   ├── /wrapper\ def handle_errors(func: _FuncT) -> _FuncT  :313
+│   │   │       │   │   └── def format_scr_error(error: SCRError) -> str  :354
+│   │   │       │   └── tool_data.py {626}
+│   │   │       │       ├── def get_test_config_tier(config_tier: ConfigTier) -> str  :433
+│   │   │       │       └── def build_ruff_rules(tier: ConfigTier, framework: FrameworkSelection, python_version: PythonVersion, run_mypy: bool) -> tuple[tuple[str, ...], tuple[str, ...]]  :494
+│   │   │       ├── execution/ [pkg]
+│   │   │       │   ├── handlers.py {1391}
+│   │   │       │   │   ├── class BaseToolHandler  :95
+│   │   │       │   │   │   ├── def run(files: list[Path], tool_config: Any, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :284
+│   │   │       │   │   │   └── def build_command(files: list[Path], tool_config: Any, global_config: GlobalConfig, effective_root: Path) -> list[str]  :313
+│   │   │       │   │   ├── class RuffHandler(BaseToolHandler)  :348
+│   │   │       │   │   │   ├── @handle_errors
+│   │   │       │   │   │   │   └── def run(files: list[Path], ruff_config: RuffConfig, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :362
+│   │   │       │   │   │   └── @handle_errors
+│   │   │       │   │   │       └── def build_command(files: list[Path], ruff_config: RuffConfig, _global_config: GlobalConfig, _effective_root: Path, fix_mode: bool) -> list[str]  :533
+│   │   │       │   │   ├── class RuffFormatterHandler(BaseToolHandler)  :624
+│   │   │       │   │   │   ├── @handle_errors
+│   │   │       │   │   │   │   └── def run(files: list[Path], ruff_config: RuffConfig, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :632
+│   │   │       │   │   │   └── @handle_errors
+│   │   │       │   │   │       └── def build_command(files: list[Path], ruff_config: RuffConfig, global_config: GlobalConfig, _effective_root: Path) -> list[str]  :674
+│   │   │       │   │   ├── class MypyHandler(BaseToolHandler)  :721
+│   │   │       │   │   │   ├── @handle_errors
+│   │   │       │   │   │   │   └── def run(files: list[Path], mypy_config: MypyConfig, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :725
+│   │   │       │   │   │   └── @handle_errors
+│   │   │       │   │   │       └── def build_command(files: list[Path], mypy_config: MypyConfig, global_config: GlobalConfig, _effective_root: Path) -> list[str]  :770
+│   │   │       │   │   ├── class RadonCCHandler(BaseToolHandler)  :882
+│   │   │       │   │   │   ├── @handle_errors
+│   │   │       │   │   │   │   └── def run(files: list[Path], radon_config: RadonConfig, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :886
+│   │   │       │   │   │   ├── @handle_errors
+│   │   │       │   │   │   │   └── def build_command(files: list[Path], radon_config: RadonConfig, _global_config: GlobalConfig, _effective_root: Path) -> list[str]  :969
+│   │   │       │   │   │   └── @handle_errors
+│   │   │       │   │   │       └── def compute_maintainability_index(files: list[Path], effective_root: Path) -> dict[str, str]  :1102
+│   │   │       │   │   ├── class BanditHandler(BaseToolHandler)  :1152
+│   │   │       │   │   │   ├── @handle_errors
+│   │   │       │   │   │   │   └── def run(files: list[Path], bandit_config: BanditConfig, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :1156
+│   │   │       │   │   │   └── @handle_errors
+│   │   │       │   │   │       └── def build_command(files: list[Path], bandit_config: BanditConfig, _global_config: GlobalConfig, _effective_root: Path) -> list[str]  :1210
+│   │   │       │   │   └── class ToolExecutor  :1298
+│   │   │       │   │       └── @handle_errors
+│   │   │       │   │           └── def run_tool(tool_name: str, files: list[Path], tool_config: Any, global_config: GlobalConfig, effective_root: Path) -> ToolResult  :1360
+│   │   │       │   ├── issues.py {175}
+│   │   │       │   │   ├── class RuffIssue  :27
+│   │   │       │   │   └── class BanditIssue  :80
+│   │   │       │   │       └── def meets_threshold(min_severity: str, min_confidence: str) -> bool  :136
+│   │   │       │   ├── results.py {105}
+│   │   │       │   │   ├── @dataclass
+│   │   │       │   │   │   └── class ToolResult  :28
+│   │   │       │   │   └── @dataclass
+│   │   │       │   │       └── class ResultTotals  :79
+│   │   │       │   └── services.py {598}
+│   │   │       │       ├── class ProjectRootService  :99
+│   │   │       │       │   ├── @staticmethod
+│   │   │       │       │   │   └── def get_project_root(start_path: Path, global_config: GlobalConfig) -> Path  :133
+│   │   │       │       │   ├── @staticmethod
+│   │   │       │       │   │   └── def get_actual_project_root(start_path: Path, global_config: GlobalConfig) -> Path  :167
+│   │   │       │       │   └── @staticmethod
+│   │   │       │       │       └── def search_upward(start: Path, max_depth: int, follow_symlinks: bool) -> Path  :245
+│   │   │       │       ├── class FileDiscoveryService  :375
+│   │   │       │       │   └── @staticmethod
+│   │   │       │       │       └── def discover_files(paths: list[Path], global_config: GlobalConfig, tool_exclusions: tuple[str, ...]) -> list[Path]  :384
+│   │   │       │       ├── def clear_tool_caches(root: Path, logger: SCRLogger) -> None  :344
+│   │   │       │       └── @functools.cache
+│   │   │       │           └── def which(command_name: str) -> Optional[str]  :543
+│   │   │       ├── output/ [pkg]
+│   │   │       │   ├── formatting.py {829}
+│   │   │       │   │   ├── class SourceReader  :50
+│   │   │       │   │   │   ├── @classmethod
+│   │   │       │   │   │   │   └── def clear_cache() -> None  :68
+│   │   │       │   │   │   └── @classmethod
+│   │   │       │   │   │       └── def read_source_context(file_path: str, line_number: int, context_lines: int) -> list[str]  :73
+│   │   │       │   │   ├── class OutputFormatter  :125
+│   │   │       │   │   │   ├── @staticmethod
+│   │   │       │   │   │   │   └── def generate_summary(tool_name: str, files_processed: int, issues_found: int, issues_fixed: int, execution_time: float, extra_metrics: Optional[dict[str, Any]]) -> str  :146
+│   │   │       │   │   │   ├── @staticmethod
+│   │   │       │   │   │   │   └── def generate_error_summary(tool_name: str, error_message: str, execution_time: float) -> str  :200
+│   │   │       │   │   │   ├── @staticmethod
+│   │   │       │   │   │   │   └── def format_tool_issues(tool_name: str, tool_data: dict[str, Any], effective_root: Path, *, show_metadata: bool, show_source: bool, show_fixed: bool) -> str  :537
+│   │   │       │   │   │   ├── @staticmethod
+│   │   │       │   │   │   │   └── def format_at_level(tool_name: str, tool_data: dict[str, Any], level: LoggerLevel, effective_root: Path) -> str  :588
+│   │   │       │   │   │   └── @staticmethod
+│   │   │       │   │   │       └── def get_tool_context(tool_name: str, tool_config: Any) -> tuple[str, str]  :710
+│   │   │       │   │   └── def format_and_log_tool_output(logger: SCRLogger, tool_name: str, tool_data: dict[str, Any], effective_root: Path) -> None  :771
+│   │   │       │   ├── header.py {356}
+│   │   │       │   │   └── def print_header(logger: SCRLogger, global_config: GlobalConfig, context: ContextDetection, effective_root: Path, tool_names: list[str], file_count: int, discovered_files: Optional[list[Path]], log_discovered_files: bool, mi_ranks: Optional[dict[str, str]], gen_status: Optional[str], cli_overrides: tuple[str, ...], pyproject_has_config: bool) -> None  :256
+│   │   │       │   ├── logger.py {610}
+│   │   │       │   │   ├── class DeferredLogBuffer  :47
+│   │   │       │   │   │   ├── @classmethod
+│   │   │       │   │   │   │   └── def capture(level: str, message: str) -> None  :67
+│   │   │       │   │   │   ├── @classmethod
+│   │   │       │   │   │   │   └── def flush(logger: Any) -> None  :83
+│   │   │       │   │   │   ├── @classmethod
+│   │   │       │   │   │   │   └── def flush_or_stderr(logger: Optional[Any]) -> None  :108
+│   │   │       │   │   │   └── @classmethod
+│   │   │       │   │   │       └── def clear() -> None  :134
+│   │   │       │   │   └── class SCRLogger  :140
+│   │   │       │   │       ├── def status(status_text: str) -> None  :386
+│   │   │       │   │       ├── def success(success_text: str) -> None  :398
+│   │   │       │   │       ├── def error(error_text: str) -> None  :410
+│   │   │       │   │       ├── def warning(warning_text: str) -> None  :423
+│   │   │       │   │       ├── def result(result_text: str) -> None  :435
+│   │   │       │   │       ├── def header(header_text: str) -> None  :447
+│   │   │       │   │       ├── def issue(issue_text: str) -> None  :459
+│   │   │       │   │       ├── def detail(detail_text: str) -> None  :472
+│   │   │       │   │       ├── def info(info_text: str) -> None  :485
+│   │   │       │   │       ├── def debug(debug_text: str) -> None  :497
+│   │   │       │   │       ├── def write_split(console_text: Optional[str], file_text: Optional[str]) -> None  :509
+│   │   │       │   │       ├── def log_tool_output(tool_name: str, tool_data: dict[str, Any], effective_root: Path) -> None  :548
+│   │   │       │   │       ├── @handle_errors
+│   │   │       │   │       │   └── def close() -> None  :577
+│   │   │       │   │       └── def get_log_info() -> dict[str, Any]  :594
+│   │   │       │   ├── reporting.py {208}
+│   │   │       │   │   ├── @handle_errors
+│   │   │       │   │   │   └── def determine_exit_code(results: list[ToolResult]) -> int  :107
+│   │   │       │   │   └── def report_final_status(results: list[ToolResult], discovered_files: list[Path], logger: SCRLogger) -> int  :147
+│   │   │       │   └── run_logging.py {193}
+│   │   │       │       └── def log_completed_result(tool_name: str, result: ToolResult, tool_config_map: dict[str, Any], logger: SCRLogger, effective_root: Path) -> None  :127
+│   │   │       ├── platforms/ [pkg]
+│   │   │       │   ├── linux.py {205}
+│   │   │       │   │   ├── def get_pathext() -> list[str]  :103
+│   │   │       │   │   ├── def get_extra_search_dirs(_interpreter_dir: str) -> list[str]  :108
+│   │   │       │   │   ├── def get_subprocess_creation_flags() -> int  :137
+│   │   │       │   │   ├── def get_subprocess_preexec_fn() -> Optional[Callable[[], None]]  :142
+│   │   │       │   │   ├── def safe_rmtree(directory: Path) -> None  :163
+│   │   │       │   │   └── def terminate_process_tree(pid: int) -> None  :184
+│   │   │       │   ├── macos.py {206}
+│   │   │       │   │   ├── def get_pathext() -> list[str]  :104
+│   │   │       │   │   ├── def get_extra_search_dirs(_interpreter_dir: str) -> list[str]  :109
+│   │   │       │   │   ├── def get_subprocess_creation_flags() -> int  :138
+│   │   │       │   │   ├── def get_subprocess_preexec_fn() -> Optional[Callable[[], None]]  :143
+│   │   │       │   │   ├── def safe_rmtree(directory: Path) -> None  :164
+│   │   │       │   │   └── def terminate_process_tree(pid: int) -> None  :185
+│   │   │       │   └── windows.py {206}
+│   │   │       │       ├── def get_pathext() -> list[str]  :109
+│   │   │       │       ├── def get_extra_search_dirs(interpreter_dir: str) -> list[str]  :114
+│   │   │       │       ├── def get_subprocess_creation_flags() -> int  :142
+│   │   │       │       ├── def get_subprocess_preexec_fn() -> Optional[Callable[[], None]]  :147
+│   │   │       │       ├── def safe_rmtree(directory: Path) -> None  :169
+│   │   │       │       └── def terminate_process_tree(pid: int) -> None  :191
+│   │   │       ├── config.py {360}
+│   │   │       │   ├── class UserDefaults  :38
+│   │   │       │   │   └── @classmethod
+│   │   │       │   │       └── def to_frozen() -> UserDefaultsSnapshot  :184
+│   │   │       │   └── @dataclass(frozen=True)
+│   │   │       │       └── class UserDefaultsSnapshot  :234
+│   │   │       └── main.py {1271}
+│   │   │           └── @handle_errors
+│   │   │               └── def main() -> int  :1191
+│   │   │                   └── calls: create_argument_parser -> parse_args
+│   │   └── README.md
+│   └── trellis/
+│       ├── docs/
+│       │   ├── dev/
+│       │   │   ├── api.md
+│       │   │   └── architecture.md
+│       │   ├── change-tracking.md
+│       │   ├── cli.md
+│       │   └── configuration.md
+│       ├── src/
+│       │   └── trellis/ [pkg] [cmd] [typed]
+│       │       ├── core/ [pkg]
+│       │       │   ├── filters.py {599}
+│       │       │   │   ├── def should_skip_system_file(item: str) -> bool  :301
+│       │       │   │   ├── def is_docs_directory_visible(directory_name: str, settings: FilterSettings) -> bool  :319
+│       │       │   │   ├── def is_special_case_item(item_name: str, is_directory: bool, settings: FilterSettings) -> bool  :340
+│       │       │   │   ├── def should_ignore_directory(directory_path: str, settings: FilterSettings) -> bool  :363
+│       │       │   │   ├── def should_ignore_file(item_path: str, settings: FilterSettings) -> bool  :389
+│       │       │   │   ├── def matches_ignored_file(file_path: str, settings: FilterSettings) -> bool  :419
+│       │       │   │   ├── def directory_matches_pattern(directory_name: str, normalized_posix: str, pattern: str) -> bool  :441
+│       │       │   │   ├── def matches_ignored_directory(path: str, settings: FilterSettings) -> bool  :469
+│       │       │   │   ├── def is_path_filtered_by_flags(path: str, settings: FilterSettings) -> bool  :512
+│       │       │   │   └── def is_path_in_ignored_hierarchy(path: str, path_ancestry: Sequence[str], settings: FilterSettings) -> bool  :549
+│       │       │   ├── io.py {144}
+│       │       │   │   └── def atomic_write_text(output_path: str, content: str) -> bool  :37
+│       │       │   ├── persistence.py {455}
+│       │       │   │   ├── class WriteStatus(Enum)  :51
+│       │       │   │   ├── class PersistenceContext(NamedTuple)  :71
+│       │       │   │   ├── class SaveResult(NamedTuple)  :116
+│       │       │   │   ├── def save_structure(ctx: PersistenceContext) -> SaveResult  :144
+│       │       │   │   └── def prepare_tree_content(project_name: str, structure: str) -> str  :303
+│       │       │   └── project_root.py {346}
+│       │       │       └── def find_project_root(start_path: _StartPath, markers: _MarkersInput, max_depth: int, follow_symlinks: bool, preference: Optional[Preference]) -> Optional[Path]  :261
+│       │       ├── output/ [pkg]
+│       │       │   └── console.py {647}
+│       │       │       └── def format_change_summary(changes: StructureChanges, project_name: str, log_path: str, max_line_width: int) -> str  :598
+│       │       ├── pyast/ [pkg]
+│       │       │   ├── analyzer.py {822}
+│       │       │   │   ├── @dataclass
+│       │       │   │   │   └── class DecoratorInfo  :52
+│       │       │   │   ├── def parse_python_file(file_path: str, source: Optional[str]) -> ast.Module  :77
+│       │       │   │   ├── def extract_top_level_nodes(tree: ast.Module) -> tuple[list[ast.ClassDef], list[FunctionNode]]  :238
+│       │       │   │   ├── def extract_class_inheritance(class_node: ast.ClassDef) -> str  :306
+│       │       │   │   ├── def is_name_hidden(name: str, *, show_private: bool, show_mangled: bool, show_dunder: bool) -> bool  :354
+│       │       │   │   ├── def format_function_signature(func_node: FunctionNode, *, include_types: bool, include_return_type: bool, include_defaults: bool) -> str  :448
+│       │       │   │   ├── def extract_decorators(node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef]) -> list[DecoratorInfo]  :624
+│       │       │   │   ├── def extract_top_level_calls(func_node: FunctionNode) -> list[str]  :747
+│       │       │   │   └── def extract_imported_names(tree: ast.Module) -> frozenset[str]  :794
+│       │       │   ├── call_flow.py {436}
+│       │       │   │   ├── def format_call_flow_line(call_names: list[str], prefix: str, max_line_width: int, connector: str) -> str  :42
+│       │       │   │   └── def filter_smart_calls(call_names: list[str], sibling_names: frozenset[str], imported_names: frozenset[str], is_hidden: _VisibilityPredicate) -> list[str]  :379
+│       │       │   ├── renderer.py {813}
+│       │       │   │   ├── class OutputSink(Protocol)  :59
+│       │       │   │   │   └── def append(line: str) -> None  :68
+│       │       │   │   ├── class RenderSettings(NamedTuple)  :74
+│       │       │   │   ├── class AstRenderer  :147
+│       │       │   │   │   ├── def render_python_structure(file_path: str, prefix: str, show_params: bool, source: Optional[str]) -> None  :183
+│       │       │   │   │   └── def render_decorator_scaffolding(decorators: list[DecoratorInfo], prefix: str, connector: str, is_last_item: bool) -> str  :306
+│       │       │   │   └── def build_render_settings(*, show_types: Optional[bool], show_decorators: Optional[bool], call_flow_mode: Optional[CallFlowMode], show_params: Optional[bool], max_line_width: Optional[int]) -> RenderSettings  :100
+│       │       │   └── tree_drawing.py {42}
+│       │       │       └── def get_tree_connectors(prefix: str, is_last_item: bool) -> tuple[str, str]  :21
+│       │       ├── tracking/ [pkg]
+│       │       │   ├── comparator.py {438}
+│       │       │   │   ├── class ApiChange(NamedTuple)  :44
+│       │       │   │   ├── class ApiEntry(NamedTuple)  :64
+│       │       │   │   ├── class StructureChanges(NamedTuple)  :81
+│       │       │   │   ├── def strip_lineno(element_line: str) -> str  :159
+│       │       │   │   ├── def extract_lineno(element_line: str) -> str  :177
+│       │       │   │   ├── def extract_signature_detail(element_line: str) -> str  :199
+│       │       │   │   └── def compare_structure_elements(old_elements: dict[str, list[str]], new_elements: dict[str, list[str]], added_file_paths: list[str], removed_file_paths: list[str]) -> StructureChanges  :377
+│       │       │   ├── detector.py {606}
+│       │       │   │   ├── def format_tr_meta(meta: str) -> str  :53
+│       │       │   │   ├── def parse_tr_meta_line(line: str) -> Optional[str]  :71
+│       │       │   │   ├── def append_tr_meta(tree_content: str, meta: str) -> str  :117
+│       │       │   │   ├── def split_tree_and_meta(content: str, project_name: str) -> tuple[str, Optional[str], str]  :139
+│       │       │   │   ├── def detect_structure_changes(new_content: str, old_content: str, project_name: str, path_filter: Callable[[str, Sequence[str]], bool], settings: FilterSettings, collected_paths: Optional[tuple[frozenset[str], dict[str, tuple[str, ...]]]], old_tree_content: Optional[str]) -> tuple[list[str], list[str], bool]  :263
+│       │       │   │   ├── def analyze_structure_paths(structure_text: str) -> tuple[set[str], dict[str, list[str]]]  :391
+│       │       │   │   └── def analyze_structure_elements(structure_text: str) -> dict[str, list[str]]  :543
+│       │       │   └── logger.py {62}
+│       │       │       └── def log_structure_changes(logs_dir: str, content: str) -> str  :28
+│       │       ├── config.py {566}
+│       │       │   ├── class CallFlowMode(Enum)  :52
+│       │       │   ├── class Config  :72
+│       │       │   ├── class FilterSettings(NamedTuple)  :236
+│       │       │   ├── class VisibilitySettings(NamedTuple)  :422
+│       │       │   ├── def build_tr_meta(*, show_types: Optional[bool], show_decorators: Optional[bool], call_flow_mode: Optional[CallFlowMode], show_docs: Optional[bool], enable_ignore_dirs: Optional[bool], enable_ignore_files: Optional[bool], show_params: Optional[bool], show_private: Optional[bool], show_dunder: Optional[bool], show_mangled: Optional[bool]) -> str  :281
+│       │       │   ├── def build_filter_settings(*, enable_ignore_dirs: Optional[bool], enable_ignore_files: Optional[bool], show_docs: Optional[bool], doc_extensions: Optional[frozenset[str]], output_dir: Optional[str], ignore_dirs: Optional[frozenset[str]], ignore_files: Optional[frozenset[str]], log_dir: Optional[str], log_structure_changes: Optional[bool], log_config_only_changes: Optional[bool]) -> FilterSettings  :353
+│       │       │   └── def parse_visibility_args(argv: list[str]) -> VisibilitySettings  :487
+│       │       └── main.py {795}
+│       │           ├── class DirectoryStructure  :82
+│       │           │   ├── @property
+│       │           │   │   └── def structure() -> str  :192
+│       │           │   ├── def append_line(line: str) -> None  :196
+│       │           │   ├── def scan_directory(current_dir: str, prefix: str) -> None  :259
+│       │           │   └── def save_structure() -> SaveResult  :619
+│       │           └── def main() -> int  :674
+│       │               └── calls: parse_visibility_args -> find_project_root -> scan_directory -> save_structure
+│       └── README.md
+└── README.md
 
 
 # tr_meta:D1I1F1T1@1C0P1V0U0S0Wsmart
