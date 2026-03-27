@@ -11,8 +11,8 @@ linter), Mypy, Radon, and Bandit in a single command with tiered strictness,
 automatic `pyproject.toml` generation, and context-aware defaults.
 
 ```bash
-pip install scrutiny[all]
-python -m scrutiny
+pip install ks-scrutiny[all]
+scrutiny
 ```
 
 **Highlights:**
@@ -28,8 +28,8 @@ Scans a directory tree and produces a text representation including classes,
 functions, signatures, decorators, and call flow analysis.
 
 ```bash
-pip install trellis
-python -m trellis
+pip install ks-trellis
+trellis
 ```
 
 **Highlights:**

@@ -10,7 +10,7 @@ summaries with timestamped log files.
 ## Installation
 
 ```bash
-pip install trellis
+pip install ks-trellis
 ```
 
 ## Quick Start
@@ -20,12 +20,6 @@ root by walking upward looking for `.git`, `pyproject.toml`, and other markers.
 
 ```bash
 trellis
-```
-
-Or run as a Python module:
-
-```bash
-python -m trellis
 ```
 
 Output is saved to `docs/{project}_structure.txt`. On subsequent runs, trellis
@@ -81,16 +75,16 @@ trellis --hide-types            # omit type annotations
 trellis --hide-decorators       # omit decorator rendering
 ```
 
-See [CLI Reference](docs/cli.md) for the full flag list.
+See [CLI Reference](https://github.com/KikiSuho/ks-tools/blob/main/packages/trellis/docs/cli.md) for the full flag list.
 
 ## Documentation
 
-- [CLI Reference](docs/cli.md) -- all flags with examples
-- [Configuration](docs/configuration.md) -- settings, ignore patterns, project root discovery
-- [Change Tracking](docs/change-tracking.md) -- how change detection works, log format
-- [Architecture](docs/dev/architecture.md) -- package layout, data flow, design patterns
-- [API Reference](docs/dev/api.md) -- programmatic usage from Python
+- [CLI Reference](https://github.com/KikiSuho/ks-tools/blob/main/packages/trellis/docs/cli.md) -- all flags with examples
+- [Configuration](https://github.com/KikiSuho/ks-tools/blob/main/packages/trellis/docs/configuration.md) -- settings, ignore patterns, project root discovery
+- [Change Tracking](https://github.com/KikiSuho/ks-tools/blob/main/packages/trellis/docs/change-tracking.md) -- how change detection works, log format
+- [Architecture](https://github.com/KikiSuho/ks-tools/blob/main/packages/trellis/docs/dev/architecture.md) -- package layout, data flow, design patterns
+- [API Reference](https://github.com/KikiSuho/ks-tools/blob/main/packages/trellis/docs/dev/api.md) -- programmatic usage from Python
 
 ## License
 
-MIT
+See [LICENSE](https://github.com/KikiSuho/ks-tools/blob/main/LICENSE).
