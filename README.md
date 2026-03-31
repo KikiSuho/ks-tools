@@ -11,7 +11,7 @@ linter), Mypy, Radon, and Bandit in a single command with tiered strictness,
 automatic `pyproject.toml` generation, and context-aware defaults.
 
 ```bash
-pip install ks-scrutiny[all]
+pip install 'ks-scrutiny[all]'
 scrutiny
 ```
 
