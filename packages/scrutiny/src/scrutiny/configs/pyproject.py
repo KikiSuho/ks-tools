@@ -199,6 +199,53 @@ class PyProjectLoader:
         return current if isinstance(current, dict) else {}
 
     @staticmethod
+    def collect_native_keys(
+        pyproject_data: dict[str, Any],
+        tool_sections: Sequence[str],
+    ) -> dict[str, frozenset[str]]:
+        """
+        Collect raw native keys observed in each requested tool section.
+
+        Scans each section in *pyproject_data* and records the keys
+        whose values are not nested dicts.  Dict values represent
+        subsections (e.g. ``[tool.ruff.lint]`` inside ``[tool.ruff]``)
+        and are excluded because they do not carry a tool setting at
+        the current level.  The returned mapping is consumed by the
+        execution layer to decide whether to suppress a scrutiny-built
+        CLI flag when pyproject.toml already defines the equivalent
+        native setting.
+
+        Parameters
+        ----------
+        pyproject_data : dict[str, Any]
+            Parsed pyproject.toml data.
+        tool_sections : Sequence[str]
+            Section names to probe (e.g. ``("ruff", "ruff.lint",
+            "ruff.format", "mypy", "bandit")``).
+
+        Returns
+        -------
+        dict[str, frozenset[str]]
+            Mapping from section name to the frozenset of value-type
+            native keys observed in that section.  Sections not
+            present in the TOML or containing only subsections are
+            omitted from the result.
+
+        """
+        native_keys: dict[str, frozenset[str]] = {}
+        # Probe each requested section and record its value-type keys.
+        for section_name in tool_sections:
+            section = PyProjectLoader.extract_tool_config(pyproject_data, section_name)
+            # Exclude nested dicts; they are subsections, not values.
+            value_keys = frozenset(
+                key for key, value in section.items() if not isinstance(value, dict)
+            )
+            # Skip empty results so callers see only populated sections.
+            if value_keys:
+                native_keys[section_name] = value_keys
+        return native_keys
+
+    @staticmethod
     def map_to_internal_keys(
         tool_name: str,
         native_config: dict[str, Any],
@@ -633,7 +680,7 @@ class PyProjectGenerator:
         mypy_settings = MYPY_TIER_SETTINGS.get(tier, {})
 
         substitutions: dict[str, str] = {
-            "line_length": str(config.line_length.value),
+            "line_length": str(config.line_length),
             "python_version": f'"{config.python_version.value}"',
             "python_version_dotted": f'"{config.python_version.to_dotted}"',
             "fix": str(config.effective_fix).lower(),
@@ -652,21 +699,28 @@ class PyProjectGenerator:
 
         # Render each tool section from its template, substituting placeholders.
         lines: list[str] = []
-        for tool_name, template in PYPROJECT_TEMPLATES.items():
-            if not template:
-                continue
-            lines.append(f"[tool.{tool_name}]")
-            for key, value_template in template.items():
-                rendered = value_template
-                for var_name, var_value in substitutions.items():
-                    rendered = rendered.replace(f"{{{var_name}}}", var_value)
-                lines.append(f"{key} = {rendered}")
-            lines.append("")
+        # Skip normal managed sections when the user scoped generation to
+        # test config only; --generate-test-config must not touch
+        # [tool.ruff], [tool.mypy], or [tool.bandit].
+        if not config.test_config_only:
+            # Render every template section except empties (e.g. ruff.format).
+            for tool_name, template in PYPROJECT_TEMPLATES.items():
+                # Skip sections with empty templates to avoid empty headers.
+                if not template:
+                    continue
+                lines.append(f"[tool.{tool_name}]")
+                for key, value_template in template.items():
+                    rendered = value_template
+                    for var_name, var_value in substitutions.items():
+                        rendered = rendered.replace(f"{{{var_name}}}", var_value)
+                    lines.append(f"{key} = {rendered}")
+                lines.append("")
 
-        # Per-file-ignores (dict-of-arrays, handled separately from
-        # key-value templates because TOML inline tables differ).
-        lines.extend(PyProjectGenerator._render_per_file_ignores())
+            # Per-file-ignores (dict-of-arrays, handled separately from
+            # key-value templates because TOML inline tables differ).
+            lines.extend(PyProjectGenerator._render_per_file_ignores())
 
+        # Append the test configuration sections when requested.
         if config.include_test_config:
             lines.extend(PyProjectGenerator._render_test_config(config))
 

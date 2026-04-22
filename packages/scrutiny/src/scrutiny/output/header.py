@@ -123,7 +123,7 @@ def _format_header_verbose(
     mode_col = f"  Mode:      {mode}"
 
     logger.header(f"{tier_col:<{column_width}}Files:     {file_count}")
-    logger.header(f"{python_col:<{column_width}}Lines:     {global_config.line_length.value}")
+    logger.header(f"{python_col:<{column_width}}Lines:     {global_config.line_length}")
     logger.header(f"{fix_col:<{column_width}}Cache:     {cache_label}")
     logger.header(f"{security_col:<{column_width}}Parallel:  {parallel_label}")
     logger.header(f"{context_col:<{column_width}}Timeout:   {int(global_config.tool_timeout)}s")
@@ -174,10 +174,16 @@ def _log_discovered_files(
     is provided, files that appear in the mapping are annotated with the
     Maintainability Index rank letter in brackets (e.g. ``script.py [C]``).
 
+    Emitted via ``logger.detail`` so the listing shows in terminal only
+    when the user has opted into ``--detailed`` or ``--verbose`` output;
+    the file log (default VERBOSE level) always receives it.  This keeps
+    the normal-mode terminal concise while preserving the full listing
+    in the per-run log for later inspection.
+
     Parameters
     ----------
     logger : SCRLogger
-        Logger instance for header-level output.
+        Logger instance for detail-level output.
     discovered_files : list[Path]
         Absolute paths of discovered Python files.
     effective_root : Path
@@ -202,7 +208,7 @@ def _log_discovered_files(
             # Show the path without annotation
             display_labels.append(relative_path)
 
-    logger.header(f"Discovered {len(relative_paths)} Python file(s)")
+    logger.detail(f"Discovered {len(relative_paths)} Python file(s)")
     column_width = max(len(label) for label in display_labels) + _COLUMN_PADDING
     midpoint = (len(display_labels) + 1) // 2
     # Render files in a two-column layout
@@ -210,7 +216,7 @@ def _log_discovered_files(
         left_label = display_labels[row_index]
         right_index = row_index + midpoint
         right_label = display_labels[right_index] if right_index < len(display_labels) else ""
-        logger.header(f"  {left_label:<{column_width}}{right_label}")
+        logger.detail(f"  {left_label:<{column_width}}{right_label}")
 
 
 def _format_cli_overrides(

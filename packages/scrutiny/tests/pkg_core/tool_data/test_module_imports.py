@@ -110,7 +110,7 @@ def test_config_imports() -> None:
 
     snapshot = UserDefaults.to_frozen()
     assert isinstance(snapshot, UserDefaultsSnapshot)
-    assert snapshot.scr_config_tier.value == "strict"
+    assert snapshot.scr_config_tier.value == "standard"
 
 
 def test_output_logger_imports() -> None:
@@ -248,7 +248,11 @@ def test_cli_module_imports() -> None:
         create_argument_parser,
     )
 
-    assert _VERSION == "1.0.0"
+    # _VERSION is sourced from ``scrutiny.__version__`` which reads the
+    # installed distribution metadata; assert only its shape rather than a
+    # fixed string so the test survives future version bumps.
+    assert isinstance(_VERSION, str)
+    assert _VERSION
     assert callable(create_argument_parser)
     assert callable(run_doctor)
     assert callable(parse_cli_to_dict)

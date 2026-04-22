@@ -23,6 +23,7 @@ import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any
 
+from scrutiny import __version__ as _VERSION
 from scrutiny.core.enums import (
     ConfigTier,
     FrameworkSelection,
@@ -34,7 +35,27 @@ from scrutiny.core.exceptions import ExitCode, handle_errors
 from scrutiny.core.tool_data import TOOL_REGISTRY
 from scrutiny.execution.services import which
 
-_VERSION = "1.0.0"
+# Generate-config mode values.  ``--generate-config`` without a value
+# implicitly uses ``GENERATE_MODE_NORMAL``; explicit values are ``test`` or
+# ``all`` to include test sections (and optionally plugin addopts).
+GENERATE_MODE_NORMAL = "normal"
+GENERATE_MODE_TEST = "test"
+GENERATE_MODE_ALL = "all"
+GENERATE_CONFIG_MODES: tuple[str, ...] = (
+    GENERATE_MODE_NORMAL,
+    GENERATE_MODE_TEST,
+    GENERATE_MODE_ALL,
+)
+
+# Generate-test-config mode values.  The standalone flag defaults to the
+# base test configuration; ``=plugins`` augments it with pytest plugin
+# addopts such as pytest-cov and pytest-xdist.
+TEST_CONFIG_MODE_NORMAL = "normal"
+TEST_CONFIG_MODE_PLUGINS = "plugins"
+GENERATE_TEST_CONFIG_MODES: tuple[str, ...] = (
+    TEST_CONFIG_MODE_NORMAL,
+    TEST_CONFIG_MODE_PLUGINS,
+)
 
 
 @handle_errors
@@ -244,20 +265,47 @@ def create_argument_parser() -> argparse.ArgumentParser:
         help="Add file pattern to exclusion list (repeatable).",
     )
 
-    # Configuration
-    parser.add_argument(
+    # Configuration generation.  ``--generate-config`` and
+    # ``--generate-test-config`` are mutually exclusive: one generates the
+    # full managed set (scoped by mode), the other generates only the test
+    # sections (scoped by an optional ``=plugins`` modifier).
+    generate_group = parser.add_mutually_exclusive_group()
+    generate_group.add_argument(
         "--generate-config",
-        action="store_true",
+        nargs="?",
+        const=GENERATE_MODE_NORMAL,
         default=None,
+        choices=GENERATE_CONFIG_MODES,
         dest="generate_config",
-        help="Generate or merge pyproject.toml with current settings.",
+        metavar="MODE",
+        help=(
+            "Generate or merge pyproject.toml managed sections. "
+            "Without a value: [tool.ruff], [tool.mypy], [tool.bandit]. "
+            "=test adds [tool.pytest.ini_options] and [tool.coverage.*]. "
+            "=all also adds pytest plugin addopts (pytest-cov, pytest-xdist)."
+        ),
+    )
+    generate_group.add_argument(
+        "--generate-test-config",
+        nargs="?",
+        const=TEST_CONFIG_MODE_NORMAL,
+        default=None,
+        choices=GENERATE_TEST_CONFIG_MODES,
+        dest="generate_test_config",
+        metavar="MODE",
+        help=(
+            "Generate or merge only the test sections "
+            "([tool.pytest.ini_options] and [tool.coverage.*]) "
+            "without touching [tool.ruff] / [tool.mypy] / [tool.bandit]. "
+            "=plugins augments with pytest plugin addopts."
+        ),
     )
     parser.add_argument(
         "--override-config",
         action="store_true",
         default=None,
         dest="override_config",
-        help="With --generate-config: overwrite existing tool settings.",
+        help="With --generate-config: overwrite existing managed tool sections.",
     )
     parser.add_argument(
         "--config-in-cwd",
@@ -265,26 +313,6 @@ def create_argument_parser() -> argparse.ArgumentParser:
         default=None,
         dest="generate_config_in_cwd",
         help="With --generate-config: target CWD instead of project root.",
-    )
-    parser.add_argument(
-        "--include-test-config",
-        action="store_true",
-        default=None,
-        dest="include_test_config",
-        help=(
-            "With --generate-config: include [tool.pytest.ini_options] "
-            "and [tool.coverage.*] sections in pyproject.toml."
-        ),
-    )
-    parser.add_argument(
-        "--include-test-plugins",
-        action="store_true",
-        default=None,
-        dest="include_test_plugins",
-        help=(
-            "With --include-test-config: add pytest-cov, pytest-xdist, "
-            "required_plugins, and duration reporting to test config."
-        ),
     )
     parser.add_argument(
         "--pyproject-only",
@@ -655,6 +683,60 @@ def _extract_toggle_overrides(args: argparse.Namespace, cli_dict: dict[str, Any]
         cli_dict["exclude_files"] = tuple(exclude_files_raw)
 
 
+def _extract_generate_config_args(
+    args: argparse.Namespace,
+    cli_dict: dict[str, Any],
+) -> None:
+    """
+    Translate generate-config mode flags into internal configuration keys.
+
+    Handles the two mutually exclusive flags:
+
+    * ``--generate-config[=test|all]`` toggles ``generate_config`` and, when
+      a scope is requested, ``include_test_config`` and
+      ``include_test_plugins``.  The normal managed sections
+      (``[tool.ruff]`` / ``[tool.mypy]`` / ``[tool.bandit]``) are always
+      written when this flag is used.
+    * ``--generate-test-config[=plugins]`` toggles ``generate_config`` with
+      ``test_config_only`` so only the test sections are emitted; the
+      optional ``=plugins`` mode adds pytest plugin addopts.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed CLI arguments.
+    cli_dict : dict[str, Any]
+        Accumulator for configuration overrides.
+
+    """
+    generate_mode = getattr(args, "generate_config", None)
+    test_config_mode = getattr(args, "generate_test_config", None)
+
+    # Honor --generate-config[=<mode>] when present.
+    if generate_mode is not None:
+        cli_dict["generate_config"] = True
+        # Scope inclusion by the selected mode; ``normal`` generates only
+        # the managed tool sections and leaves test config alone.
+        if generate_mode == GENERATE_MODE_TEST:
+            # Include pytest + coverage sections but skip plugin addopts.
+            cli_dict["include_test_config"] = True
+        elif generate_mode == GENERATE_MODE_ALL:
+            # Include pytest + coverage sections with plugin addopts too.
+            cli_dict["include_test_config"] = True
+            cli_dict["include_test_plugins"] = True
+        return
+
+    # Honor --generate-test-config[=plugins] when present.  The mutex group
+    # at the parser level guarantees the two flags cannot coexist.
+    if test_config_mode is not None:
+        cli_dict["generate_config"] = True
+        cli_dict["include_test_config"] = True
+        cli_dict["test_config_only"] = True
+        # Augment with plugin addopts only when explicitly requested.
+        if test_config_mode == TEST_CONFIG_MODE_PLUGINS:
+            cli_dict["include_test_plugins"] = True
+
+
 def parse_cli_to_dict(args: argparse.Namespace) -> dict[str, Any]:
     """
     Extract non-None CLI arguments into a configuration dictionary.
@@ -684,11 +766,8 @@ def parse_cli_to_dict(args: argparse.Namespace) -> dict[str, Any]:
         "parallel",
         "no_cache",
         "clear_cache",
-        "generate_config",
         "override_config",
         "generate_config_in_cwd",
-        "include_test_config",
-        "include_test_plugins",
         "pyproject_only",
         "fix",
         "unsafe_fixes",
@@ -700,11 +779,14 @@ def parse_cli_to_dict(args: argparse.Namespace) -> dict[str, Any]:
         if getattr(args, attr, False):
             cli_dict[attr] = True
 
-    # Phase 3: console logger level (directly from argparse const).
+    # Phase 3: generate-config scoping from the two mode-valued flags.
+    _extract_generate_config_args(args, cli_dict)
+
+    # Phase 4: console logger level (directly from argparse const).
     if args.console_logger_level is not None:
         cli_dict["console_logger_level"] = args.console_logger_level
 
-    # Phase 4: enum conversions and --no-* toggle overrides.
+    # Phase 5: enum conversions and --no-* toggle overrides.
     _extract_enum_args(args, cli_dict)
     _extract_toggle_overrides(args, cli_dict)
 

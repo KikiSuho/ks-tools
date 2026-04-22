@@ -50,7 +50,12 @@ from scrutiny.core.exceptions import (
     format_scr_error,
     handle_errors,
 )
-from scrutiny.core.tool_data import PYPROJECT_KEY_MAP, TOOL_ALIASES, TOOL_REGISTRY
+from scrutiny.core.tool_data import (
+    PYPROJECT_KEY_MAP,
+    PYPROJECT_TEMPLATES,
+    TOOL_ALIASES,
+    TOOL_REGISTRY,
+)
 from scrutiny.execution.handlers import RadonCCHandler, ToolExecutor
 from scrutiny.execution.results import ToolResult
 from scrutiny.execution.services import (
@@ -199,9 +204,15 @@ def _run_tool_safe(
 def _load_pyproject_config(
     start_path: Path,
     max_depth: SearchDepth = SearchDepth.MODERATE,
-) -> tuple[dict[str, dict[str, Any]], Optional[Path]]:
+) -> tuple[dict[str, dict[str, Any]], dict[str, frozenset[str]], Optional[Path]]:
     """
     Discover and parse pyproject.toml tool configuration.
+
+    In addition to the scrutiny-internal mapped configuration, the
+    raw native keys present in each managed ``[tool.*]`` section are
+    returned so the execution layer can suppress scrutiny-built CLI
+    flags when pyproject.toml already defines the equivalent native
+    setting.
 
     Parameters
     ----------
@@ -212,11 +223,13 @@ def _load_pyproject_config(
 
     Returns
     -------
-    tuple[dict[str, dict[str, Any]], Optional[Path]]
-        Mapped configuration and the path to pyproject.toml (or None).
+    tuple[dict[str, dict[str, Any]], dict[str, frozenset[str]], Optional[Path]]
+        Mapped configuration, raw native keys observed per managed
+        tool section, and the path to pyproject.toml (or ``None``).
 
     """
     pyproject_mapped: dict[str, dict[str, Any]] = {}
+    pyproject_native_keys: dict[str, frozenset[str]] = {}
     pyproject_path = PyProjectLoader.find_pyproject_toml(start_path, max_depth=max_depth)
     # Load and remap tool configuration sections from pyproject.toml.
     if pyproject_path is not None:
@@ -235,12 +248,19 @@ def _load_pyproject_config(
                         tool_name,
                         native,
                     )
+            # Collect raw native keys across every managed section so the
+            # execution layer can suppress scrutiny-built CLI flags when
+            # pyproject.toml already defines the equivalent setting.
+            pyproject_native_keys = PyProjectLoader.collect_native_keys(
+                raw_data,
+                tuple(PYPROJECT_TEMPLATES.keys()),
+            )
         except SCRConfigurationError as config_read_error:
             # Log a warning and continue with empty config rather than aborting
             DeferredLogBuffer.capture(
                 "warning", f"Failed to read {pyproject_path}: {config_read_error}"
             )
-    return pyproject_mapped, pyproject_path
+    return pyproject_mapped, pyproject_native_keys, pyproject_path
 
 
 def _show_effective_config(
@@ -280,7 +300,7 @@ def _show_effective_config(
     logger.status("Effective Configuration")
     logger.status(f"  Tier: {global_config.config_tier.value}")
     logger.status(f"  Python: {global_config.python_version.value}")
-    logger.status(f"  Line length: {global_config.line_length.value}")
+    logger.status(f"  Line length: {global_config.line_length}")
     logger.status(f"  Fix: {global_config.effective_fix}")
     logger.status(f"  No cache: {global_config.no_cache}")
     logger.status(f"  Clear cache: {global_config.clear_cache}")
@@ -329,20 +349,16 @@ def _determine_tool_names(
 
     """
     # Explicit --tool selection overrides the global enabled-tools list.
+    # A user naming a specific tool is expressing explicit intent, so the
+    # per-tool run_* defaults are bypassed; the requested tool runs even
+    # when its default toggle is off (e.g. ``--tool ruff_formatter`` runs
+    # the formatter regardless of ``RUN_RUFF_FORMATTER``).
     if args.tools:
         tool_names: list[str] = []
-        # Expand aliases and filter disabled tools from each CLI argument
+        # Expand aliases into their constituent tool identifiers.
         for tool_arg in args.tools:
             expanded = TOOL_ALIASES.get(tool_arg, [tool_arg])
-            # Check each expanded name against its enable flag
-            for name in expanded:
-                # Skip ruff_formatter when the user has disabled it
-                if name == "ruff_formatter" and not global_config.run_ruff_formatter:
-                    continue
-                # Skip ruff_linter when the user has disabled it
-                if name == "ruff_linter" and not global_config.run_ruff_linter:
-                    continue
-                tool_names.append(name)
+            tool_names.extend(expanded)
         return tool_names
     # Default: derive tool list from global config and execution context.
     return global_config.get_enabled_tools(context)
@@ -581,6 +597,48 @@ def _run_config_generation(
     return PyProjectGenerator.generate_or_merge(config_target, global_config)
 
 
+def _maybe_emit_config_hint(
+    logger: SCRLogger,
+    global_config: GlobalConfig,
+    *,
+    pyproject_has_config: bool,
+) -> None:
+    """
+    Emit a one-line hint when no managed pyproject section was detected.
+
+    Shown once per run at the end of ``_run_analysis_phase`` to nudge
+    first-time users toward bootstrapping their pyproject.toml.  The
+    hint is suppressed when the current run performed generation (the
+    user has already acted), when pyproject.toml already carries any
+    managed section, or when pyproject-only mode signals that the user
+    has intentionally opted out of scrutiny's own defaults.
+
+    Parameters
+    ----------
+    logger : SCRLogger
+        Active run logger for status-level output.
+    global_config : GlobalConfig
+        Resolved global configuration.
+    pyproject_has_config : bool
+        True when pyproject.toml contributed at least one managed
+        tool section to the resolved configuration.
+
+    """
+    # Skip when pyproject already defines a managed section.
+    if pyproject_has_config:
+        return
+    # Skip when the user explicitly generated this run; they acted.
+    if global_config.generate_config:
+        return
+    # Skip in pyproject-only mode; the user has intentionally opted out.
+    if global_config.pyproject_only:
+        return
+    logger.status(
+        "No [tool.ruff] / [tool.mypy] / [tool.bandit] section found. "
+        "Run `scrutiny --generate-config` to create one.",
+    )
+
+
 def _resolve_log_root(
     start_path: Path,
     global_config: GlobalConfig,
@@ -808,7 +866,7 @@ def _build_resolved_config(
     # Detect execution context (IDE, CI, terminal, etc.).
     context = ContextDetection.detect()
     # Load pyproject.toml configuration (may be empty if no file found).
-    pyproject_mapped, pyproject_path = _load_pyproject_config(
+    pyproject_mapped, pyproject_native_keys, pyproject_path = _load_pyproject_config(
         start_path,
         max_depth=snapshot.scr_max_upward_search_depth,
     )
@@ -818,6 +876,7 @@ def _build_resolved_config(
     resolver = ConfigResolver(
         cli_args=cli_dict,
         pyproject_config=pyproject_mapped,
+        pyproject_native_keys=pyproject_native_keys,
         context=context,
         tier=tier,
         pyproject_only=pyproject_only,
@@ -1113,7 +1172,15 @@ def _run_analysis_phase(
                 effective_root,
                 logger,
             )
-            return report_final_status(results, discovered_files, logger)
+            exit_code = report_final_status(results, discovered_files, logger)
+            # Nudge first-time users toward config generation when no
+            # managed section was detected and this run did not generate.
+            _maybe_emit_config_hint(
+                logger,
+                global_config,
+                pyproject_has_config=pyproject_has_config,
+            )
+            return exit_code
 
         except SCRError as analysis_pipeline_failure:
             # Buffer was already drained at DeferredLogBuffer.flush() above; no pre-logger messages

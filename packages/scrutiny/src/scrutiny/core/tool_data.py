@@ -216,6 +216,7 @@ RUFF_FRAMEWORK_RULES: dict[str, tuple[str, ...]] = {
 RUFF_CLI_FLAGS: dict[str, str] = {
     "select_rules": "--select={value}",
     "ignore_rules": "--ignore={value}",
+    "extend_select_rules": "--extend-select={value}",
     "line_length": "--line-length={value}",
     "target_version": "--target-version={value}",
     "output_format": "--output-format={value}",
@@ -579,6 +580,7 @@ PYPROJECT_KEY_MAP: dict[str, dict[str, str]] = {
         "line-length": "line_length",
         "target-version": "python_version",
         "fix": "fix",
+        "unsafe-fixes": "unsafe_fixes",
     },
     "ruff.lint": {
         "select": "select_rules",

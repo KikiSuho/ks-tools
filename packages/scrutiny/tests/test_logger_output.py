@@ -2015,10 +2015,10 @@ class TestLogDiscoveredFiles:
         _log_discovered_files(logger, files, root, None)
 
         # Assert
-        header_calls = [str(call) for call in logger.header.call_args_list]
-        assert any("Discovered 4 Python file(s)" in call for call in header_calls)
+        detail_calls = [str(call) for call in logger.detail.call_args_list]
+        assert any("Discovered 4 Python file(s)" in call for call in detail_calls)
         # Two-column layout: 4 files -> 2 rows.
-        file_lines = [call for call in header_calls if "Discovered" not in call]
+        file_lines = [call for call in detail_calls if "Discovered" not in call]
         assert len(file_lines) == 2
 
     def test_appends_mi_rank_when_provided(self, tmp_path: Path) -> None:
@@ -2034,8 +2034,8 @@ class TestLogDiscoveredFiles:
         _log_discovered_files(logger, [file_path], root, mi_ranks)
 
         # Assert
-        header_calls = [str(call) for call in logger.header.call_args_list]
-        assert any("script.py [C]" in call for call in header_calls)
+        detail_calls = [str(call) for call in logger.detail.call_args_list]
+        assert any("script.py [C]" in call for call in detail_calls)
 
     def test_omits_mi_rank_when_none(self, tmp_path: Path) -> None:
         """Verify no rank annotation when mi_ranks is None."""
@@ -2049,9 +2049,9 @@ class TestLogDiscoveredFiles:
         _log_discovered_files(logger, [file_path], root, None)
 
         # Assert
-        header_calls = [str(call) for call in logger.header.call_args_list]
-        assert any("script.py" in call for call in header_calls)
-        assert not any("[" in call for call in header_calls if "Discovered" not in call)
+        detail_calls = [str(call) for call in logger.detail.call_args_list]
+        assert any("script.py" in call for call in detail_calls)
+        assert not any("[" in call for call in detail_calls if "Discovered" not in call)
 
     def test_single_file_no_second_column(self, tmp_path: Path) -> None:
         """Verify single file renders with one row and no second column."""
@@ -2065,7 +2065,7 @@ class TestLogDiscoveredFiles:
         _log_discovered_files(logger, [file_path], root, None)
 
         # Assert
-        header_calls = [str(call) for call in logger.header.call_args_list]
-        assert any("Discovered 1 Python file(s)" in call for call in header_calls)
-        file_lines = [call for call in header_calls if "Discovered" not in call]
+        detail_calls = [str(call) for call in logger.detail.call_args_list]
+        assert any("Discovered 1 Python file(s)" in call for call in detail_calls)
+        file_lines = [call for call in detail_calls if "Discovered" not in call]
         assert len(file_lines) == 1

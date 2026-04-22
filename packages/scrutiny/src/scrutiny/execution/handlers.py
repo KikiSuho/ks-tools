@@ -534,12 +534,19 @@ class RuffHandler(BaseToolHandler):
         self,
         files: list[Path],
         ruff_config: RuffConfig,
-        _global_config: GlobalConfig,
+        global_config: GlobalConfig,
         _effective_root: Path,
         fix_mode: bool = False,
     ) -> list[str]:
         """
         Build a ``ruff check`` command from data-section mappings.
+
+        Each flag is gated by ``global_config.should_emit`` so that a
+        native pyproject.toml setting is never overridden by a
+        scrutiny-built CLI flag.  Explicit scrutiny CLI overrides win
+        over every other source, pyproject.toml wins over scrutiny's
+        script defaults, and script defaults only fill in keys the
+        user has not expressed.
 
         Parameters
         ----------
@@ -547,8 +554,9 @@ class RuffHandler(BaseToolHandler):
             Files to lint.
         ruff_config : RuffConfig
             Ruff configuration.
-        _global_config : GlobalConfig
-            Unused; required by interface contract.
+        global_config : GlobalConfig
+            Global configuration; carries provenance used for
+            suppression decisions.
         _effective_root : Path
             Unused; required by interface contract.
         fix_mode : bool
@@ -565,33 +573,66 @@ class RuffHandler(BaseToolHandler):
 
         # Output format or fix flags (mutually exclusive modes).
         if not fix_mode:
-            # Check mode: capture issues as JSON
+            # Check mode: always capture issues as JSON; operational flag.
             append_valued_flag(command, RUFF_CLI_FLAGS, "output_format", "json")
         else:
-            # Fix mode: apply auto-fixes to files on disk
-            self._append_boolean_flag(command, RUFF_CLI_FLAGS, "fix")
-            if ruff_config.unsafe_fixes:
+            # Fix mode: emit --fix only when pyproject has not set fix natively.
+            if global_config.should_emit("fix", "ruff", "fix"):
+                self._append_boolean_flag(command, RUFF_CLI_FLAGS, "fix")
+            # Emit --unsafe-fixes only when enabled and not covered by pyproject.
+            if ruff_config.unsafe_fixes and global_config.should_emit(
+                "unsafe_fixes", "ruff", "unsafe-fixes",
+            ):
                 self._append_boolean_flag(command, RUFF_CLI_FLAGS, "unsafe_fixes")
 
-        # Line length and target Python version.
-        append_valued_flag(command, RUFF_CLI_FLAGS, "line_length", str(ruff_config.line_length))
-        append_valued_flag(command, RUFF_CLI_FLAGS, "target_version", ruff_config.target_version)
+        # Line length: suppress when pyproject defines [tool.ruff] line-length.
+        if global_config.should_emit("line_length", "ruff", "line-length"):
+            append_valued_flag(
+                command, RUFF_CLI_FLAGS, "line_length", str(ruff_config.line_length),
+            )
+        # Target version: suppress when pyproject defines [tool.ruff] target-version.
+        if global_config.should_emit("python_version", "ruff", "target-version"):
+            append_valued_flag(
+                command, RUFF_CLI_FLAGS, "target_version", ruff_config.target_version,
+            )
 
-        # Rule selection and ignore overrides.
-        if ruff_config.select_rules:
+        # Select rules: suppress when pyproject defines [tool.ruff.lint] select.
+        if ruff_config.select_rules and global_config.should_emit(
+            "select_rules", "ruff.lint", "select",
+        ):
             append_valued_flag(
-                command, RUFF_CLI_FLAGS, "select_rules", ",".join(ruff_config.select_rules)
+                command, RUFF_CLI_FLAGS, "select_rules", ",".join(ruff_config.select_rules),
             )
-        if ruff_config.ignore_rules:
+        # Extend-select is always additive and only emitted when framework
+        # rules need to augment an authoritative pyproject select list.
+        # Suppress when pyproject defines [tool.ruff.lint] extend-select.
+        if ruff_config.extend_select_rules and global_config.should_emit(
+            "framework", "ruff.lint", "extend-select",
+        ):
             append_valued_flag(
-                command, RUFF_CLI_FLAGS, "ignore_rules", ",".join(ruff_config.ignore_rules)
+                command,
+                RUFF_CLI_FLAGS,
+                "extend_select_rules",
+                ",".join(ruff_config.extend_select_rules),
             )
-        if ruff_config.no_cache:
+        # Ignore rules: suppress when pyproject defines [tool.ruff.lint] ignore.
+        if ruff_config.ignore_rules and global_config.should_emit(
+            "ignore_rules", "ruff.lint", "ignore",
+        ):
+            append_valued_flag(
+                command, RUFF_CLI_FLAGS, "ignore_rules", ",".join(ruff_config.ignore_rules),
+            )
+        # no_cache is a scrutiny operational concern with no pyproject equivalent.
+        if ruff_config.no_cache and global_config.should_emit("no_cache"):
             self._append_boolean_flag(command, RUFF_CLI_FLAGS, "no_cache")
 
-        # Per-tool exclusions and file paths.
-        for exclusion in ruff_config.get_exclusions():
-            command.extend(["--exclude", exclusion])
+        # Exclusions: suppress when pyproject defines [tool.ruff] exclude,
+        # so ruff reads the user's list natively and scrutiny's own list
+        # does not overwrite it via repeated --exclude flags.
+        if global_config.should_emit("exclude_dirs", "ruff", "exclude"):
+            # Emit every scrutiny-known exclusion as a separate --exclude flag.
+            for exclusion in ruff_config.get_exclusions():
+                command.extend(["--exclude", exclusion])
 
         command.extend(str(file_path) for file_path in files)
         return command
@@ -681,6 +722,12 @@ class RuffFormatterHandler(BaseToolHandler):
         """
         Build a ``ruff format`` command.
 
+        Each scrutiny-built flag is gated by ``global_config.should_emit``
+        so native pyproject.toml settings are not overridden via the
+        command line.  ``--check`` is an operational mode switch driven
+        by scrutiny and is emitted unconditionally when ``check_only``
+        is active.
+
         Parameters
         ----------
         files : list[Path]
@@ -688,7 +735,8 @@ class RuffFormatterHandler(BaseToolHandler):
         ruff_config : RuffConfig
             Ruff configuration.
         global_config : GlobalConfig
-            Global configuration.
+            Global configuration; carries provenance used for
+            suppression decisions.
         _effective_root : Path
             Unused; required by interface contract.
 
@@ -702,17 +750,27 @@ class RuffFormatterHandler(BaseToolHandler):
         append_valued_flag = self._append_valued_flag
         append_boolean_flag = self._append_boolean_flag
 
-        # Check mode (dry-run).
+        # Check mode (dry-run) is an operational mode, not a pyproject value.
         if global_config.check_only:
             append_boolean_flag(command, RUFF_CLI_FLAGS, "check")
 
-        # Line length and target version.
-        append_valued_flag(command, RUFF_CLI_FLAGS, "line_length", str(ruff_config.line_length))
-        append_valued_flag(command, RUFF_CLI_FLAGS, "target_version", ruff_config.target_version)
+        # Line length: suppress when pyproject defines [tool.ruff] line-length.
+        if global_config.should_emit("line_length", "ruff", "line-length"):
+            append_valued_flag(
+                command, RUFF_CLI_FLAGS, "line_length", str(ruff_config.line_length),
+            )
+        # Target version: suppress when pyproject defines [tool.ruff] target-version.
+        if global_config.should_emit("python_version", "ruff", "target-version"):
+            append_valued_flag(
+                command, RUFF_CLI_FLAGS, "target_version", ruff_config.target_version,
+            )
 
-        # Exclusions.
-        for exclusion in ruff_config.get_exclusions():
-            command.extend(["--exclude", exclusion])
+        # Exclusions: suppress when pyproject defines [tool.ruff] exclude so
+        # the formatter reads the user's list natively.
+        if global_config.should_emit("exclude_dirs", "ruff", "exclude"):
+            # Emit every scrutiny-known exclusion as a separate --exclude flag.
+            for exclusion in ruff_config.get_exclusions():
+                command.extend(["--exclude", exclusion])
 
         command.extend(str(file_path) for file_path in files)
         return command
@@ -777,6 +835,12 @@ class MypyHandler(BaseToolHandler):
         """
         Build a ``mypy`` command from data-section mappings.
 
+        Each flag is gated by ``global_config.should_emit`` so
+        ``[tool.mypy]`` values from pyproject.toml take precedence
+        over scrutiny's script defaults.  Operational flags
+        (``--output=json``, ``--no-incremental``) have no pyproject
+        equivalent and are emitted unconditionally when active.
+
         Parameters
         ----------
         files : list[Path]
@@ -784,7 +848,8 @@ class MypyHandler(BaseToolHandler):
         mypy_config : MypyConfig
             Mypy configuration.
         global_config : GlobalConfig
-            Global configuration (used for cache control).
+            Global configuration; carries provenance used for
+            suppression decisions.
         _effective_root : Path
             Unused; required by interface contract.
 
@@ -798,40 +863,70 @@ class MypyHandler(BaseToolHandler):
         append_valued_flag = self._append_valued_flag
         append_boolean_flag = self._append_boolean_flag
 
-        # Boolean flags driven by MYPY_CLI_FLAGS.
-        enabled_flags = [
-            name
-            for name, enabled in (
-                ("strict_mode", mypy_config.strict_mode),
-                ("warn_unreachable", mypy_config.warn_unreachable),
-                ("disallow_untyped_globals", mypy_config.disallow_untyped_globals),
-                ("disallow_any_explicit", mypy_config.disallow_any_explicit),
-                ("ignore_missing_imports", mypy_config.ignore_missing_imports),
-                (
-                    "disable_error_code_import_untyped",
-                    mypy_config.disable_error_code_import_untyped,
-                ),
-                ("show_column_numbers", mypy_config.show_column_numbers),
-                ("show_error_codes", mypy_config.show_error_codes),
-            )
-            if enabled
-        ]
-        for field_name in enabled_flags:
-            append_boolean_flag(command, MYPY_CLI_FLAGS, field_name)
+        # Pairs of (scrutiny_key, mypy_config_field_value, native_key).  The
+        # native key is the TOML key users would write under [tool.mypy]; when
+        # present it suppresses the corresponding CLI flag.
+        boolean_specs: tuple[tuple[str, bool, str], ...] = (
+            ("strict_mode", mypy_config.strict_mode, "strict"),
+            ("warn_unreachable", mypy_config.warn_unreachable, "warn_unreachable"),
+            (
+                "disallow_untyped_globals",
+                mypy_config.disallow_untyped_globals,
+                "disallow_untyped_globals",
+            ),
+            (
+                "disallow_any_explicit",
+                mypy_config.disallow_any_explicit,
+                "disallow_any_explicit",
+            ),
+            (
+                "ignore_missing_imports",
+                mypy_config.ignore_missing_imports,
+                "ignore_missing_imports",
+            ),
+            (
+                "disable_error_code_import_untyped",
+                mypy_config.disable_error_code_import_untyped,
+                "disable_error_code",
+            ),
+            (
+                "show_column_numbers",
+                mypy_config.show_column_numbers,
+                "show_column_numbers",
+            ),
+            (
+                "show_error_codes",
+                mypy_config.show_error_codes,
+                "show_error_codes",
+            ),
+        )
+        # Emit each enabled boolean flag that pyproject has not claimed.
+        for scrutiny_key, is_enabled, native_key in boolean_specs:
+            # Skip disabled flags; they never emit.
+            if not is_enabled:
+                continue
+            # Suppress when pyproject.toml already covers the same setting.
+            if global_config.should_emit(scrutiny_key, "mypy", native_key):
+                append_boolean_flag(command, MYPY_CLI_FLAGS, scrutiny_key)
 
-        # JSON output for structured parsing (mirrors Ruff's --output-format=json).
+        # JSON output is operational and mirrors Ruff's --output-format=json.
         append_valued_flag(command, MYPY_CLI_FLAGS, "output", "json")
 
-        # Cache control.
-        if global_config.no_cache:
+        # Cache control is a scrutiny operational concern with no pyproject equivalent.
+        if global_config.no_cache and global_config.should_emit("no_cache"):
             command.append("--no-incremental")
 
-        # Python version (template flag).
-        append_valued_flag(command, MYPY_CLI_FLAGS, "python_version", mypy_config.python_version)
+        # Python version: suppress when pyproject defines [tool.mypy] python_version.
+        if global_config.should_emit("python_version", "mypy", "python_version"):
+            append_valued_flag(
+                command, MYPY_CLI_FLAGS, "python_version", mypy_config.python_version,
+            )
 
-        # Exclusions.
-        for exclusion in mypy_config.get_exclusions():
-            command.extend(["--exclude", exclusion])
+        # Exclusions: suppress when pyproject defines [tool.mypy] exclude.
+        if global_config.should_emit("exclude_dirs", "mypy", "exclude"):
+            # Emit every scrutiny-known exclusion as a separate --exclude flag.
+            for exclusion in mypy_config.get_exclusions():
+                command.extend(["--exclude", exclusion])
 
         command.extend(str(file_path) for file_path in files)
         return command
@@ -1211,11 +1306,16 @@ class BanditHandler(BaseToolHandler):
         self,
         files: list[Path],
         bandit_config: BanditConfig,
-        _global_config: GlobalConfig,
+        global_config: GlobalConfig,
         _effective_root: Path,
     ) -> list[str]:
         """
         Build a ``bandit`` command from data-section mappings.
+
+        Each flag is gated by ``global_config.should_emit`` so
+        ``[tool.bandit]`` values from pyproject.toml take precedence
+        over scrutiny's script defaults.  ``-f json`` is operational
+        and emitted unconditionally.
 
         Parameters
         ----------
@@ -1223,8 +1323,9 @@ class BanditHandler(BaseToolHandler):
             Files to scan.
         bandit_config : BanditConfig
             Bandit configuration.
-        _global_config : GlobalConfig
-            Unused; required by interface contract.
+        global_config : GlobalConfig
+            Global configuration; carries provenance used for
+            suppression decisions.
         _effective_root : Path
             Unused; required by interface contract.
 
@@ -1238,7 +1339,7 @@ class BanditHandler(BaseToolHandler):
         append_valued_flag = self._append_valued_flag
         append_boolean_flag = self._append_boolean_flag
 
-        # JSON output (fallback to literal flags if template missing).
+        # JSON output is operational; fallback to literal flags if template missing.
         format_template = BANDIT_CLI_FLAGS.get("format", "")
         # Use the template when available; fall back to literal flags
         if format_template and "{value}" in format_template:
@@ -1248,21 +1349,30 @@ class BanditHandler(BaseToolHandler):
             # Hardcoded fallback when the template is absent
             command.extend(["-f", "json"])
 
-        # Severity and confidence threshold flags.
+        # Bandit exposes no canonical pyproject keys for severity or
+        # confidence, so scrutiny emits these as CLI flags always; a
+        # user CLI override still wins via the resolver's priority
+        # chain.  Quiet mode and skip-tests likewise have no pyproject
+        # equivalent beyond ``skips``, which is handled below.
         append_valued_flag(command, BANDIT_CLI_FLAGS, "severity", bandit_config.severity)
         append_valued_flag(command, BANDIT_CLI_FLAGS, "confidence", bandit_config.confidence)
 
-        # Optional quiet mode and test skip list.
+        # Quiet mode is scrutiny-internal; no pyproject equivalent.
         if bandit_config.quiet:
             append_boolean_flag(command, BANDIT_CLI_FLAGS, "quiet")
-        if bandit_config.skip_tests:
+        # Skip tests: suppress when pyproject defines [tool.bandit] skips.
+        if bandit_config.skip_tests and global_config.should_emit(
+            "skip_tests", "bandit", "skips",
+        ):
             append_valued_flag(
-                command, BANDIT_CLI_FLAGS, "skip_tests", ",".join(bandit_config.skip_tests)
+                command, BANDIT_CLI_FLAGS, "skip_tests", ",".join(bandit_config.skip_tests),
             )
 
-        # Per-tool exclusions and file paths.
-        for exclusion in bandit_config.get_exclusions():
-            append_valued_flag(command, BANDIT_CLI_FLAGS, "exclude", exclusion)
+        # Exclusions: suppress when pyproject defines [tool.bandit] exclude_dirs.
+        if global_config.should_emit("exclude_dirs", "bandit", "exclude_dirs"):
+            # Emit every scrutiny-known exclusion as a separate CLI flag.
+            for exclusion in bandit_config.get_exclusions():
+                append_valued_flag(command, BANDIT_CLI_FLAGS, "exclude", exclusion)
 
         command.extend(str(file_path) for file_path in files)
         return command

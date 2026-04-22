@@ -809,6 +809,8 @@ class TestConfigEnums:
 
     def test_global_config_accepts_enum_values(self) -> None:
         """GlobalConfig should accept enum values without errors."""
+        # LineLength is an IntEnum so passing a member still satisfies the int
+        # field; validation only requires a positive integer within bounds.
         config = GlobalConfig(
             python_version=PythonVersion.PY312,
             line_length=LineLength.BLACK,
@@ -816,14 +818,38 @@ class TestConfigEnums:
             tool_timeout=ToolTimeout.QUICK,
         )
         assert config.python_version == PythonVersion.PY312
-        assert config.line_length == LineLength.BLACK
+        assert config.line_length == int(LineLength.BLACK)
         assert config.max_upward_search_depth == SearchDepth.SHALLOW
         assert config.tool_timeout == ToolTimeout.QUICK
 
-    def test_global_config_rejects_raw_int_for_line_length(self) -> None:
-        """GlobalConfig should reject raw int for line_length."""
-        with pytest.raises(SCRConfigurationError, match=r"must be LineLength"):
-            GlobalConfig(line_length=100)
+    def test_global_config_accepts_raw_int_for_line_length(self) -> None:
+        """GlobalConfig accepts any positive int within bounds for line_length."""
+        # Arrange
+        user_value = 123
+
+        # Act
+        config = GlobalConfig(line_length=user_value)
+
+        # Assert
+        assert config.line_length == user_value
+
+    def test_global_config_rejects_line_length_below_minimum(self) -> None:
+        """GlobalConfig rejects line_length values smaller than the minimum."""
+        # Arrange
+        below_minimum = 1
+
+        # Act / Assert
+        with pytest.raises(SCRConfigurationError, match=r"line_length must be >="):
+            GlobalConfig(line_length=below_minimum)
+
+    def test_global_config_rejects_line_length_above_maximum(self) -> None:
+        """GlobalConfig rejects line_length values larger than the maximum."""
+        # Arrange
+        above_maximum = 9999
+
+        # Act / Assert
+        with pytest.raises(SCRConfigurationError, match=r"line_length must be <="):
+            GlobalConfig(line_length=above_maximum)
 
     def test_global_config_rejects_raw_str_for_python_version(self) -> None:
         """GlobalConfig should reject raw str for python_version."""

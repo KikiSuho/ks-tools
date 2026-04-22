@@ -383,78 +383,207 @@ class TestRenderTemplatesTestConfig:
         assert "pytest" in parsed["tool"]
         assert "coverage" in parsed["tool"]
 
+    def test_test_config_only_skips_normal_managed_sections(self) -> None:
+        """test_config_only=True suppresses ruff/mypy/bandit section emission."""
+        # Arrange
+        config = GlobalConfig(
+            include_test_config=True,
+            test_config_only=True,
+        )
+
+        # Act
+        output = PyProjectGenerator._render_templates(config)
+
+        # Assert - only test sections are emitted; normal managed sections
+        # remain absent so --generate-test-config cannot clobber them.
+        assert "[tool.pytest.ini_options]" in output
+        assert "[tool.coverage.run]" in output
+        assert "[tool.ruff]" not in output
+        assert "[tool.mypy]" not in output
+        assert "[tool.bandit]" not in output
+
+    def test_test_config_only_without_include_test_config_emits_nothing(self) -> None:
+        """test_config_only with include_test_config=False renders an empty string."""
+        # Arrange
+        config = GlobalConfig(
+            include_test_config=False,
+            test_config_only=True,
+        )
+
+        # Act
+        output = PyProjectGenerator._render_templates(config)
+
+        # Assert - no managed sections, no test sections, just whitespace.
+        assert output.strip() == ""
+
 
 # ── CLI flags: --include-test-config / --include-test-plugins ── #
 
 
 @pytest.mark.unit
 class TestTestConfigCLIFlags:
-    """Test CLI parser and parse_cli_to_dict for test config flags."""
+    """Test CLI parser and parse_cli_to_dict for generate-config scoping."""
 
-    def test_include_test_config_flag_accepted(self) -> None:
-        """Parser accepts --include-test-config without error."""
+    def test_generate_config_bare_selects_normal_mode(self) -> None:
+        """--generate-config without a value resolves to the normal mode sentinel."""
+        # Arrange
         parser = create_argument_parser()
 
-        args = parser.parse_args(["--include-test-config"])
+        # Act
+        args = parser.parse_args(["--generate-config"])
 
-        assert args.include_test_config is True
+        # Assert
+        assert args.generate_config == "normal"
 
-    def test_include_test_plugins_flag_accepted(self) -> None:
-        """Parser accepts --include-test-plugins without error."""
+    def test_generate_config_test_mode_flag_accepted(self) -> None:
+        """--generate-config=test is a valid mode for the parser."""
+        # Arrange
         parser = create_argument_parser()
 
-        args = parser.parse_args(["--include-test-plugins"])
+        # Act
+        args = parser.parse_args(["--generate-config=test"])
 
-        assert args.include_test_plugins is True
+        # Assert
+        assert args.generate_config == "test"
 
-    def test_include_test_config_default_none(self) -> None:
-        """include_test_config defaults to None when not passed."""
+    def test_generate_config_all_mode_flag_accepted(self) -> None:
+        """--generate-config=all is a valid mode for the parser."""
+        # Arrange
         parser = create_argument_parser()
 
+        # Act
+        args = parser.parse_args(["--generate-config=all"])
+
+        # Assert
+        assert args.generate_config == "all"
+
+    def test_generate_test_config_bare_selects_normal_mode(self) -> None:
+        """--generate-test-config without a value resolves to the normal sentinel."""
+        # Arrange
+        parser = create_argument_parser()
+
+        # Act
+        args = parser.parse_args(["--generate-test-config"])
+
+        # Assert
+        assert args.generate_test_config == "normal"
+
+    def test_generate_test_config_plugins_mode_flag_accepted(self) -> None:
+        """--generate-test-config=plugins selects the plugin-augmented mode."""
+        # Arrange
+        parser = create_argument_parser()
+
+        # Act
+        args = parser.parse_args(["--generate-test-config=plugins"])
+
+        # Assert
+        assert args.generate_test_config == "plugins"
+
+    def test_generate_flags_default_none(self) -> None:
+        """Both generate flags default to None when not passed."""
+        # Arrange
+        parser = create_argument_parser()
+
+        # Act
         args = parser.parse_args([])
 
-        assert args.include_test_config is None
+        # Assert
+        assert args.generate_config is None
+        assert args.generate_test_config is None
 
-    def test_include_test_plugins_default_none(self) -> None:
-        """include_test_plugins defaults to None when not passed."""
+    def test_generate_flags_are_mutually_exclusive(self) -> None:
+        """Passing both generate flags at once raises SystemExit from argparse."""
+        # Arrange
         parser = create_argument_parser()
 
-        args = parser.parse_args([])
+        # Act / Assert
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--generate-config", "--generate-test-config"])
 
-        assert args.include_test_plugins is None
-
-    def test_parse_cli_includes_test_config_when_set(self) -> None:
-        """parse_cli_to_dict includes include_test_config=True when flag is set."""
+    def test_parse_cli_generate_normal_only_sets_generate_flag(self) -> None:
+        """--generate-config alone sets generate_config without include flags."""
+        # Arrange
         parser = create_argument_parser()
-        args = parser.parse_args(["--include-test-config"])
+        args = parser.parse_args(["--generate-config"])
 
+        # Act
         result = parse_cli_to_dict(args)
 
+        # Assert
+        assert result["generate_config"] is True
+        assert "include_test_config" not in result
+        assert "include_test_plugins" not in result
+        assert "test_config_only" not in result
+
+    def test_parse_cli_generate_test_adds_test_config(self) -> None:
+        """--generate-config=test enables include_test_config only."""
+        # Arrange
+        parser = create_argument_parser()
+        args = parser.parse_args(["--generate-config=test"])
+
+        # Act
+        result = parse_cli_to_dict(args)
+
+        # Assert
+        assert result["generate_config"] is True
         assert result["include_test_config"] is True
+        assert "include_test_plugins" not in result
 
-    def test_parse_cli_includes_test_plugins_when_set(self) -> None:
-        """parse_cli_to_dict includes include_test_plugins=True when flag is set."""
+    def test_parse_cli_generate_all_adds_test_config_and_plugins(self) -> None:
+        """--generate-config=all enables both test config and plugin addopts."""
+        # Arrange
         parser = create_argument_parser()
-        args = parser.parse_args(["--include-test-plugins"])
+        args = parser.parse_args(["--generate-config=all"])
 
+        # Act
         result = parse_cli_to_dict(args)
 
+        # Assert
+        assert result["generate_config"] is True
+        assert result["include_test_config"] is True
         assert result["include_test_plugins"] is True
 
-    def test_parse_cli_omits_test_config_when_unset(self) -> None:
-        """parse_cli_to_dict omits include_test_config when flag is not set."""
+    def test_parse_cli_generate_test_only_sets_test_config_only(self) -> None:
+        """--generate-test-config sets test_config_only to scope generation."""
+        # Arrange
         parser = create_argument_parser()
-        args = parser.parse_args([])
+        args = parser.parse_args(["--generate-test-config"])
 
+        # Act
         result = parse_cli_to_dict(args)
 
-        assert "include_test_config" not in result
-
-    def test_parse_cli_omits_test_plugins_when_unset(self) -> None:
-        """parse_cli_to_dict omits include_test_plugins when flag is not set."""
-        parser = create_argument_parser()
-        args = parser.parse_args([])
-
-        result = parse_cli_to_dict(args)
-
+        # Assert
+        assert result["generate_config"] is True
+        assert result["include_test_config"] is True
+        assert result["test_config_only"] is True
         assert "include_test_plugins" not in result
+
+    def test_parse_cli_generate_test_only_with_plugins(self) -> None:
+        """--generate-test-config=plugins adds plugin addopts to the test scope."""
+        # Arrange
+        parser = create_argument_parser()
+        args = parser.parse_args(["--generate-test-config=plugins"])
+
+        # Act
+        result = parse_cli_to_dict(args)
+
+        # Assert
+        assert result["generate_config"] is True
+        assert result["include_test_config"] is True
+        assert result["include_test_plugins"] is True
+        assert result["test_config_only"] is True
+
+    def test_parse_cli_omits_generate_keys_when_unset(self) -> None:
+        """parse_cli_to_dict omits generate-related keys when no flag is passed."""
+        # Arrange
+        parser = create_argument_parser()
+        args = parser.parse_args([])
+
+        # Act
+        result = parse_cli_to_dict(args)
+
+        # Assert
+        assert "generate_config" not in result
+        assert "include_test_config" not in result
+        assert "include_test_plugins" not in result
+        assert "test_config_only" not in result

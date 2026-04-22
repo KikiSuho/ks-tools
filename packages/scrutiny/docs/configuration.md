@@ -30,7 +30,7 @@ and basic pycodestyle errors.
 **Radon:** threshold D (very complex, 21-30)
 **Bandit:** HIGH severity, HIGH confidence
 
-### Standard
+### Standard (default)
 
 Quality and correctness. Adds flake8-bugbear, import sorting,
 naming conventions, comprehension checks, and more.
@@ -40,7 +40,7 @@ naming conventions, comprehension checks, and more.
 **Radon:** threshold C (complex, 11-20)
 **Bandit:** MEDIUM severity, HIGH confidence
 
-### Strict (default)
+### Strict
 
 Maximum rigor. Adds docstring conventions, exception handling
 patterns, logging rules, performance checks, and Pylint subsets.
@@ -66,7 +66,9 @@ detection, quote consistency, TODO formatting, and full Pylint.
 
 | Setting | Default | CLI Flag |
 |---------|---------|----------|
-| Fix mode | `True` | `--fix` / `--check-only` |
+| Run formatter | `False` (opt-in) | `--tool ruff_formatter` or `--tool ruff` |
+| Run linter | `True` | `--tool ruff_linter` or `--no-ruff` |
+| Fix mode | `False` (opt-in) | `--fix` / `--check-only` |
 | Unsafe fixes | `False` | `--unsafe-fixes` |
 | Line length | 100 | `--line-length` |
 | Target version | py39 | `--python-version` |
@@ -74,8 +76,11 @@ detection, quote consistency, TODO formatting, and full Pylint.
 
 ### Mypy
 
-| Setting | Strict Default | Description |
-|---------|---------------|-------------|
+Values shown are for the ``strict`` tier; ``essential`` and ``standard``
+relax ``strict_mode`` and ``disallow_untyped_globals`` to ``False``.
+
+| Setting | Strict tier | Description |
+|---------|-------------|-------------|
 | `strict_mode` | `True` | Enable all strict checks |
 | `warn_unreachable` | `True` | Flag unreachable code |
 | `disallow_untyped_globals` | `True` | Reject untyped module-level variables |
@@ -161,22 +166,52 @@ Radon automatically excludes test directories from complexity analysis:
 Scrutiny reads existing `[tool.*]` sections from pyproject.toml and
 maps native TOML keys to internal configuration. Supported sections:
 
-- `[tool.ruff]` - line-length, target-version, fix
-- `[tool.ruff.lint]` - select, ignore
-- `[tool.mypy]` - python_version, strict, warn_unreachable, etc.
-- `[tool.bandit]` - exclude_dirs, skips
+- `[tool.ruff]` - `line-length`, `target-version`, `fix`, `unsafe-fixes`
+- `[tool.ruff.lint]` - `select`, `ignore`
+- `[tool.mypy]` - `python_version`, `strict`, `warn_unreachable`,
+  `ignore_missing_imports`, and more
+- `[tool.bandit]` - `exclude_dirs`, `skips`
+
+### Runtime priority
+
+At runtime scrutiny enforces a strict contract when building tool
+commands: **CLI override > pyproject.toml > scrutiny defaults**.
+If a key appears in pyproject.toml, scrutiny does not emit a CLI
+flag that would shadow it. This means `fix = false` in
+`[tool.ruff]` actually disables auto-fix, and `exclude = [...]` in
+`[tool.ruff]` is read natively by ruff. The same holds for mypy
+and bandit.
+
+Additional notes:
+
+- `line-length` accepts any integer in `[40, 500]`; it is not
+  restricted to scrutiny's ``LineLength`` enum members.
+- Framework rule families (`--framework django`, etc.) are emitted
+  via `--extend-select`, so they supplement your pyproject `select`
+  rather than replacing it.
+- Operational flags with no pyproject equivalent (``--no-cache``,
+  JSON output) emit regardless of mode.
 
 ### Generation
 
-With `--generate-config`, scrutiny creates or merges pyproject.toml:
+Generation is opt-in via an explicit flag. Running `scrutiny` by
+itself analyses your code without touching pyproject.toml.
 
-| Mode | Behavior |
-|------|----------|
-| New file | Creates complete pyproject.toml from templates |
-| Existing (merge) | Adds missing keys without overwriting |
-| Existing (override) | Replaces managed tool sections, preserves unmanaged |
+| Flag | Generates |
+|------|-----------|
+| `--generate-config` | `[tool.ruff]`, `[tool.mypy]`, `[tool.bandit]` |
+| `--generate-config=test` | Above + `[tool.pytest.ini_options]` + `[tool.coverage.*]` |
+| `--generate-config=all` | Above + pytest plugin addopts |
+| `--generate-test-config` | Only test sections (no managed tool sections) |
+| `--generate-test-config=plugins` | Only test sections with plugin addopts |
 
-Managed tool sections: `ruff`, `mypy`, `bandit`.
+`--generate-config` and `--generate-test-config` are mutually
+exclusive. Combine either with `--override-config` to replace
+existing managed sections instead of merging missing keys.
+
+Managed tool sections: `ruff`, `mypy`, `bandit`. Test sections
+(`pytest`, `coverage`) are always merged; `--override-config` does
+not apply to them.
 
 ## Logging
 

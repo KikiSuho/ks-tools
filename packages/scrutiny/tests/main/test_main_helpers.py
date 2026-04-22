@@ -161,7 +161,7 @@ class TestDetermineToolNames:
         """Verify no --tool falls back to get_enabled_tools."""
         # Arrange
         args = _make_tool_args()
-        global_config = make_global_config()
+        global_config = make_global_config(run_ruff_formatter=True)
         context = ContextDetection.CLI
 
         # Act
@@ -171,18 +171,34 @@ class TestDetermineToolNames:
         assert len(tool_names) >= 1
         assert "ruff_formatter" in tool_names
 
-    def test_ruff_with_formatter_disabled_only_adds_linter(self) -> None:
-        """Verify --tool ruff with formatter disabled only adds linter."""
+    def test_explicit_tool_bypasses_run_flag(self) -> None:
+        """An explicit --tool request runs the tool even when run_X is False."""
         # Arrange
-        args = _make_tool_args(tools=["ruff"])
+        args = _make_tool_args(tools=["ruff_formatter"])
         global_config = make_global_config(run_ruff_formatter=False)
         context = ContextDetection.CLI
 
         # Act
         tool_names = _determine_tool_names(args, global_config, context)
 
-        # Assert
-        assert "ruff_formatter" not in tool_names
+        # Assert - explicit CLI intent overrides the off-by-default toggle.
+        assert tool_names == ["ruff_formatter"]
+
+    def test_explicit_ruff_alias_bypasses_run_flags(self) -> None:
+        """--tool ruff expands to both capabilities regardless of run_* defaults."""
+        # Arrange
+        args = _make_tool_args(tools=["ruff"])
+        global_config = make_global_config(
+            run_ruff_formatter=False,
+            run_ruff_linter=False,
+        )
+        context = ContextDetection.CLI
+
+        # Act
+        tool_names = _determine_tool_names(args, global_config, context)
+
+        # Assert - both formatter and linter run when the alias is requested.
+        assert "ruff_formatter" in tool_names
         assert "ruff_linter" in tool_names
 
 
@@ -515,20 +531,19 @@ class TestDetermineToolNamesEdgeCases:
         # Assert
         assert result == ["ruff_security"]
 
-    def test_ruff_with_both_disabled_returns_empty(self) -> None:
-        """Ruff with both formatter and linter disabled returns empty."""
-        # Arrange
-        args = _make_tool_args(tools=["ruff"])
-        config = make_global_config(
-            run_ruff_formatter=False,
-            run_ruff_linter=False,
-        )
+    def test_default_config_omits_ruff_formatter_from_enabled_list(self) -> None:
+        """Default global config runs the linter but not the formatter."""
+        # Arrange - with no --tool argument, tool selection follows run_* defaults.
+        args = _make_tool_args()
+        config = make_global_config()
 
         # Act
         result = _determine_tool_names(args, config, ContextDetection.CLI)
 
-        # Assert
-        assert result == []
+        # Assert - ruff_formatter is off by default so it must not appear;
+        # read-only analyzers still run.
+        assert "ruff_formatter" not in result
+        assert "ruff_linter" in result
 
 
 # ── Integration/lifecycle: main.py orchestration ── #

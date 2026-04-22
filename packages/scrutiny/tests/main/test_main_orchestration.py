@@ -26,6 +26,7 @@ from scrutiny.main import (
     _execute_tools_parallel,
     _execute_tools_sequential,
     _load_pyproject_config,
+    _maybe_emit_config_hint,
     _resolve_log_root,
     _run_config_generation,
     _run_tool_safe,
@@ -202,16 +203,17 @@ class TestLoadPyprojectConfig:
     """Tests for pyproject.toml discovery and parsing."""
 
     def test_returns_empty_when_no_pyproject_found(self, tmp_path: Path) -> None:
-        """Returns empty dict and None when no pyproject.toml exists."""
+        """Returns empty dicts and None when no pyproject.toml exists."""
         # Act
-        mapped, path = _load_pyproject_config(tmp_path)
+        mapped, native_keys, path = _load_pyproject_config(tmp_path)
 
         # Assert
         assert mapped == {}
+        assert native_keys == {}
         assert path is None
 
     def test_returns_mapped_config_when_pyproject_exists(self, tmp_path: Path) -> None:
-        """Returns mapped configuration when pyproject.toml is found."""
+        """Returns mapped configuration and native keys when pyproject.toml is found."""
         # Arrange
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
@@ -220,11 +222,12 @@ class TestLoadPyprojectConfig:
         )
 
         # Act
-        mapped, path = _load_pyproject_config(tmp_path)
+        mapped, native_keys, path = _load_pyproject_config(tmp_path)
 
         # Assert
         assert path is not None
         assert isinstance(mapped, dict)
+        assert isinstance(native_keys, dict)
 
     def test_captures_warning_on_config_error(self, tmp_path: Path) -> None:
         """Logs warning via DeferredLogBuffer when pyproject parsing fails."""
@@ -239,10 +242,11 @@ class TestLoadPyprojectConfig:
             side_effect=SCRConfigurationError("bad toml"),
         ):
             # Act
-            mapped, _path = _load_pyproject_config(tmp_path)
+            mapped, native_keys, _path = _load_pyproject_config(tmp_path)
 
         # Assert - still returns results (no crash), warning was captured
         assert isinstance(mapped, dict)
+        assert isinstance(native_keys, dict)
 
 
 # ---------------------------------------------------------------------------
@@ -738,3 +742,63 @@ def test_compute_mi_ranks_returns_none_when_radon_not_enabled() -> None:
 
     # Assert
     assert result is None
+
+
+# ====================================== #
+#        CONFIG HINT EMISSION            #
+# ====================================== #
+
+
+@pytest.mark.unit
+class TestMaybeEmitConfigHint:
+    """Verify the no-config-found hint's emission rules."""
+
+    def test_hint_emitted_when_no_managed_section_detected(self) -> None:
+        """A pyproject without managed sections and no generation triggers the hint."""
+        # Arrange
+        logger = MagicMock(spec=SCRLogger)
+        config = make_global_config(generate_config=False, pyproject_only=False)
+
+        # Act
+        _maybe_emit_config_hint(logger, config, pyproject_has_config=False)
+
+        # Assert
+        logger.status.assert_called_once()
+        message = logger.status.call_args.args[0]
+        assert "scrutiny --generate-config" in message
+
+    def test_hint_suppressed_when_pyproject_has_managed_section(self) -> None:
+        """Existing managed sections mean the user already bootstrapped config."""
+        # Arrange
+        logger = MagicMock(spec=SCRLogger)
+        config = make_global_config(generate_config=False, pyproject_only=False)
+
+        # Act
+        _maybe_emit_config_hint(logger, config, pyproject_has_config=True)
+
+        # Assert
+        logger.status.assert_not_called()
+
+    def test_hint_suppressed_when_generating_config_this_run(self) -> None:
+        """Running with --generate-config on the same invocation suppresses the hint."""
+        # Arrange
+        logger = MagicMock(spec=SCRLogger)
+        config = make_global_config(generate_config=True, pyproject_only=False)
+
+        # Act
+        _maybe_emit_config_hint(logger, config, pyproject_has_config=False)
+
+        # Assert
+        logger.status.assert_not_called()
+
+    def test_hint_suppressed_in_pyproject_only_mode(self) -> None:
+        """pyproject_only=True signals intentional opt-out; hint is noise."""
+        # Arrange
+        logger = MagicMock(spec=SCRLogger)
+        config = make_global_config(generate_config=False, pyproject_only=True)
+
+        # Act
+        _maybe_emit_config_hint(logger, config, pyproject_has_config=False)
+
+        # Assert
+        logger.status.assert_not_called()

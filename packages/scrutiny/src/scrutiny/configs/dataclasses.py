@@ -5,6 +5,13 @@ Contain the shared validator, orchestration-level ``GlobalConfig``, the
 ``_ToolConfigMixin``, and individual tool config dataclasses (``RuffConfig``,
 ``MypyConfig``, ``RadonConfig``, ``BanditConfig``).
 
+Constants
+---------
+GLOBAL_MIN_LINE_LENGTH : Inclusive lower bound for ``GlobalConfig.line_length``.
+GLOBAL_MAX_LINE_LENGTH : Inclusive upper bound for ``GlobalConfig.line_length``.
+TOOL_MIN_LINE_LENGTH : Inclusive lower bound for tool-level line length.
+TOOL_MAX_LINE_LENGTH : Inclusive upper bound for tool-level line length.
+
 Classes
 -------
 GlobalConfig : Orchestration-level configuration resolved from all sources.
@@ -24,13 +31,12 @@ Examples
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from scrutiny.config import UserDefaults
 from scrutiny.core.enums import (
     ConfigTier,
     FrameworkSelection,
-    LineLength,
     LoggerLevel,
     LogLocation,
     PythonVersion,
@@ -52,8 +58,123 @@ if TYPE_CHECKING:
 
 
 # ====================================== #
+#               CONSTANTS                #
+# ====================================== #
+
+# Inclusive bounds for user-provided line length at the orchestration level.
+# The lower bound rejects values too small to be meaningful for any linter
+# or formatter; the upper bound rejects runaway numbers without locking
+# users to an enum.  Tool configs keep a tighter range so scrutiny's own
+# tier defaults remain within a sane envelope.
+GLOBAL_MIN_LINE_LENGTH = 40
+GLOBAL_MAX_LINE_LENGTH = 500
+TOOL_MIN_LINE_LENGTH = 40
+TOOL_MAX_LINE_LENGTH = 500
+
+# Two-element tuple length used for (section, native_key) provenance pairs.
+TWO_ELEMENT_TUPLE_LEN = 2
+
+# Characters that make a string unsafe as a subprocess argv component.  Null
+# bytes corrupt the argv itself; whitespace breaks token boundaries; commas
+# split comma-joined flag payloads (e.g. ``--select=A,B``); equals signs embed
+# secondary flag syntax (e.g. ``--target-version=--config=/etc/passwd``).
+# Any value destined for argv that fails this check could inject arbitrary
+# flags into the downstream tool when sourced from pyproject.toml.
+_ARGV_UNSAFE_CHARS: frozenset[str] = frozenset("\x00\t\n\r ,=")
+
+# Path-valued fields (exclude_dirs/files) legitimately carry characters the
+# strict argv check rejects (notably ``=`` inside a glob is rare but allowed),
+# so they use a looser rule: reject only null bytes and newlines, and reject
+# leading ``-`` which would be interpreted as a flag when the path is passed
+# as a bare argv element.
+_PATH_UNSAFE_CHARS: frozenset[str] = frozenset("\x00\n\r")
+
+
+# ====================================== #
 #       CONFIGURATION VALIDATION         #
 # ====================================== #
+
+
+def _check_argv_safe(value: str, field_label: str) -> None:
+    """
+    Reject values that could inject CLI flags through subprocess argv.
+
+    Called for scrutiny-internal tokens (rule IDs, Python version strings,
+    bandit test IDs) that either flow into comma-joined flag payloads or
+    into ``--flag={value}`` templates.  A leading hyphen makes the token
+    indistinguishable from a flag; commas, equals signs, or whitespace
+    let a crafted pyproject.toml value smuggle additional flags into the
+    tool invocation.
+
+    Parameters
+    ----------
+    value : str
+        The token to check.  Empty strings are accepted; callers that
+        forbid emptiness should use ``validate_string_fields`` first.
+    field_label : str
+        Human-readable identifier for the field (used in error messages).
+
+    Raises
+    ------
+    SCRConfigurationError
+        When the value is unsafe to pass as a subprocess argv component.
+
+    """
+    # Empty tokens are structurally safe; emptiness is a separate concern.
+    if not value:
+        return
+    # Reject tokens that would be read as a flag by the downstream tool.
+    if value.startswith("-"):
+        raise SCRConfigurationError(
+            f"{field_label} cannot start with '-': {value!r} "
+            f"(would be interpreted as a CLI flag by the subprocess)",
+        )
+    # Reject embedded argv metacharacters that let a crafted value inject
+    # additional flags through comma-joined or ``=``-joined templates.
+    unsafe = sorted({char for char in value if char in _ARGV_UNSAFE_CHARS})
+    if unsafe:
+        raise SCRConfigurationError(
+            f"{field_label} contains unsafe characters {unsafe!r}: {value!r}",
+        )
+
+
+def _check_path_safe(value: str, field_label: str) -> None:
+    """
+    Reject path-valued strings that could inject flags or corrupt argv.
+
+    Looser than ``_check_argv_safe`` because paths legitimately carry
+    ``/``, ``*``, ``.``, and middle hyphens.  Still rejects leading
+    hyphens (indistinguishable from flags), null bytes (argv corruption),
+    and newlines (line-based tool parsers may misbehave).
+
+    Parameters
+    ----------
+    value : str
+        The path or glob to check.
+    field_label : str
+        Human-readable identifier for the field (used in error messages).
+
+    Raises
+    ------
+    SCRConfigurationError
+        When the value would be unsafe as a path argv component.
+
+    """
+    # Empty path entries are meaningless; leave detection to callers.
+    if not value:
+        return
+    # Reject paths that would be parsed as a flag by the downstream tool.
+    if value.startswith("-"):
+        raise SCRConfigurationError(
+            f"{field_label} cannot start with '-': {value!r} "
+            f"(prefix with './' to reference a path whose name starts with a dash)",
+        )
+    # Reject null bytes and newlines which corrupt argv or line parsers.
+    unsafe = sorted({char for char in value if char in _PATH_UNSAFE_CHARS})
+    if unsafe:
+        raise SCRConfigurationError(
+            f"{field_label} contains unsafe characters {unsafe!r}: {value!r}",
+        )
 
 
 class _SharedConfigValidator:
@@ -197,6 +318,149 @@ class _SharedConfigValidator:
                 )
 
     @staticmethod
+    def validate_argv_safe_string(instance: Any, field_name: str) -> None:
+        """
+        Ensure a scalar string field cannot inject CLI flags via subprocess argv.
+
+        Values are read untrusted from pyproject.toml and CLI arguments
+        before reaching subprocess invocations built by the execution
+        handlers; this validator is the last boundary before they are
+        joined into flag templates.
+
+        Parameters
+        ----------
+        instance : Any
+            Dataclass instance being validated.
+        field_name : str
+            Scalar string attribute to check.
+
+        Raises
+        ------
+        SCRConfigurationError
+            When the value is unsafe to pass as a subprocess argv component.
+
+        """
+        value = getattr(instance, field_name)
+        _check_argv_safe(value, f"{type(instance).__name__}.{field_name}")
+
+    @staticmethod
+    def validate_argv_safe_tuple(instance: Any, field_name: str) -> None:
+        """
+        Ensure every element of a tuple field is argv-safe.
+
+        Applied to rule-token tuples (``select_rules``, ``ignore_rules``,
+        ``extend_select_rules``, ``skip_tests``) before the handler joins
+        them with commas into flags like ``--select=A,B``.
+
+        Parameters
+        ----------
+        instance : Any
+            Dataclass instance being validated.
+        field_name : str
+            Tuple-of-str attribute to check.
+
+        Raises
+        ------
+        SCRConfigurationError
+            When any element is unsafe to pass as a subprocess argv
+            component.
+
+        """
+        values = getattr(instance, field_name)
+        # Validate each element with its positional label so the error
+        # message pinpoints the offending entry.
+        for index, element in enumerate(values):
+            _check_argv_safe(
+                element,
+                f"{type(instance).__name__}.{field_name}[{index}]",
+            )
+
+    @staticmethod
+    def validate_path_safe_tuple(instance: Any, field_name: str) -> None:
+        """
+        Ensure every element of a path-valued tuple field is argv-safe.
+
+        Used for ``exclude_dirs`` / ``exclude_files`` where entries may
+        legitimately contain ``/`` and ``*`` but must not be mistaken
+        for flags or corrupt argv.
+
+        Parameters
+        ----------
+        instance : Any
+            Dataclass instance being validated.
+        field_name : str
+            Tuple-of-str attribute to check.
+
+        Raises
+        ------
+        SCRConfigurationError
+            When any element is unsafe as a path argv component.
+
+        """
+        values = getattr(instance, field_name)
+        # Validate each element with its positional label so the error
+        # message pinpoints the offending entry.
+        for index, element in enumerate(values):
+            _check_path_safe(
+                element,
+                f"{type(instance).__name__}.{field_name}[{index}]",
+            )
+
+    @staticmethod
+    def validate_provenance_fields(instance: Any) -> None:
+        """
+        Validate the CLI-override and pyproject-native provenance fields.
+
+        Ensures ``cli_override_keys`` is a ``frozenset`` of strings and
+        ``pyproject_native_pairs`` is a ``frozenset`` of two-element
+        string tuples.  Rejects malformed inputs so handler suppression
+        logic cannot be misled by a crafted dataclass state.
+
+        Parameters
+        ----------
+        instance : Any
+            Dataclass instance being validated.
+
+        Raises
+        ------
+        SCRConfigurationError
+            If either field is the wrong type or contains malformed entries.
+
+        """
+        cli_override_keys = instance.cli_override_keys
+        # Reject anything that is not a frozenset of strings.
+        if not isinstance(cli_override_keys, frozenset):
+            raise SCRConfigurationError(
+                f"{type(instance).__name__}.cli_override_keys must be frozenset, "
+                f"got {type(cli_override_keys).__name__}",
+            )
+        # Reject any non-string element; provenance keys are tokens only.
+        if not all(isinstance(element, str) for element in cli_override_keys):
+            raise SCRConfigurationError(
+                f"{type(instance).__name__}.cli_override_keys must contain only strings",
+            )
+
+        pyproject_native_pairs = instance.pyproject_native_pairs
+        # Reject anything that is not a frozenset of (section, key) tuples.
+        if not isinstance(pyproject_native_pairs, frozenset):
+            raise SCRConfigurationError(
+                f"{type(instance).__name__}.pyproject_native_pairs must be frozenset, "
+                f"got {type(pyproject_native_pairs).__name__}",
+            )
+        # Validate each pair is a two-element tuple of strings.
+        for pair in pyproject_native_pairs:
+            if not isinstance(pair, tuple) or len(pair) != TWO_ELEMENT_TUPLE_LEN:
+                raise SCRConfigurationError(
+                    f"{type(instance).__name__}.pyproject_native_pairs must "
+                    f"contain two-element tuples, got {pair!r}",
+                )
+            if not all(isinstance(element, str) for element in pair):
+                raise SCRConfigurationError(
+                    f"{type(instance).__name__}.pyproject_native_pairs must "
+                    f"contain only strings, got {pair!r}",
+                )
+
+    @staticmethod
     def validate_enum_field(
         instance: Any,
         field_name: str,
@@ -251,8 +515,11 @@ class GlobalConfig:
         Quality tier controlling rule strictness across all tools.
     python_version : PythonVersion
         Target Python version (e.g. ``PythonVersion.PY39``).
-    line_length : LineLength
-        Maximum line length for formatting and linting.
+    line_length : int
+        Maximum line length for formatting and linting.  Accepts any
+        integer in ``[GLOBAL_MIN_LINE_LENGTH, GLOBAL_MAX_LINE_LENGTH]``
+        so user-provided values from pyproject.toml or scrutiny's
+        CLI are not forced to match the ``LineLength`` enum members.
     current_dir_as_root : bool
         When True, treat invocation directory as project root.
     max_upward_search_depth : SearchDepth
@@ -311,6 +578,10 @@ class GlobalConfig:
         Include pytest/coverage sections in pyproject.toml generation.
     include_test_plugins : bool
         Include test plugin config in pyproject.toml generation.
+    test_config_only : bool
+        Restrict generation to test sections only, skipping the
+        normal ``[tool.ruff]`` / ``[tool.mypy]`` / ``[tool.bandit]``
+        sections.  Paired with ``--generate-test-config``.
     pyproject_only : bool
         When True, use pyproject.toml as the sole authoritative config
         source, bypassing script defaults (priorities 4-5).
@@ -321,12 +592,21 @@ class GlobalConfig:
         Project-specific file pattern exclusions.
     log_discovered_files : bool
         List discovered files in the log header.
+    cli_override_keys : frozenset[str]
+        Scrutiny-internal field names the user passed explicitly on
+        the scrutiny command line.  Consulted by ``should_emit`` so
+        that user CLI intent wins over every other source.
+    pyproject_native_pairs : frozenset[tuple[str, str]]
+        Raw ``(section, native_key)`` pairs observed in
+        pyproject.toml tool sections.  Consulted by ``should_emit``
+        so handlers can suppress scrutiny-built CLI flags when the
+        user already defined the equivalent setting natively.
 
     """
 
     config_tier: ConfigTier = UserDefaults.SCR_CONFIG_TIER
     python_version: PythonVersion = UserDefaults.SCR_PYTHON_VERSION
-    line_length: LineLength = UserDefaults.SCR_LINE_LENGTH
+    line_length: int = int(UserDefaults.SCR_LINE_LENGTH.value)
     current_dir_as_root: bool = UserDefaults.SCR_CURRENT_DIR_AS_ROOT
     max_upward_search_depth: SearchDepth = UserDefaults.SCR_MAX_UPWARD_SEARCH_DEPTH
     follow_symlinks: bool = UserDefaults.SCR_FOLLOW_SYMLINKS
@@ -355,10 +635,16 @@ class GlobalConfig:
     generate_config_in_cwd: bool = UserDefaults.SCR_GENERATE_CONFIG_IN_CWD
     include_test_config: bool = UserDefaults.SCR_INCLUDE_TEST_CONFIG
     include_test_plugins: bool = UserDefaults.SCR_INCLUDE_TEST_PLUGINS
+    test_config_only: bool = UserDefaults.SCR_TEST_CONFIG_ONLY
     pyproject_only: bool = UserDefaults.SCR_PYPROJECT_ONLY
     exclude_dirs: tuple[str, ...] = UserDefaults.SCR_EXCLUDE_DIRS
     exclude_files: tuple[str, ...] = UserDefaults.SCR_EXCLUDE_FILES
     log_discovered_files: bool = UserDefaults.SCR_LOG_DISCOVERED_FILES
+    # Provenance tracking for the execution layer.  Defaults preserve the
+    # direct-construction path used by tests: empty sets mean "no CLI override
+    # or pyproject coverage known" so every flag is emitted as before.
+    cli_override_keys: frozenset[str] = frozenset()
+    pyproject_native_pairs: frozenset[tuple[str, str]] = frozenset()
 
     # DESIGN NOTE: Every field default references UserDefaults.* so that
     # GlobalConfig() can be constructed directly in tests without going through
@@ -378,10 +664,12 @@ class GlobalConfig:
             "python_version",
             PythonVersion,
         )
-        _SharedConfigValidator.validate_enum_field(
+        _SharedConfigValidator.validate_int_fields(
             self,
-            "line_length",
-            LineLength,
+            line_length={
+                "min_value": GLOBAL_MIN_LINE_LENGTH,
+                "max_value": GLOBAL_MAX_LINE_LENGTH,
+            },
         )
         _SharedConfigValidator.validate_enum_field(
             self,
@@ -452,12 +740,14 @@ class GlobalConfig:
             "log_discovered_files",
             "include_test_config",
             "include_test_plugins",
+            "test_config_only",
         )
         _SharedConfigValidator.validate_tuple_fields(
             self,
             "exclude_dirs",
             "exclude_files",
         )
+        _SharedConfigValidator.validate_provenance_fields(self)
 
     def get_enabled_tools(self, context: ContextDetection) -> list[str]:
         """
@@ -533,6 +823,67 @@ class GlobalConfig:
         """
         return self.fix and not self.check_only
 
+    def should_emit(
+        self,
+        scrutiny_key: str,
+        pyproject_section: Optional[str] = None,
+        pyproject_native_key: Optional[str] = None,
+    ) -> bool:
+        """
+        Decide whether a handler should emit a scrutiny-built CLI flag.
+
+        The priority contract is: explicit scrutiny CLI overrides beat
+        everything, pyproject.toml beats scrutiny's own defaults, and
+        scrutiny's defaults only fill in keys that neither source has
+        expressed.  When the user has defined the equivalent native
+        key in their pyproject.toml, the handler must suppress the
+        flag so the tool reads the pyproject value directly; otherwise
+        the emitted flag would override the native setting.
+
+        Operational flags with no pyproject equivalent (callers pass
+        ``None`` for both locator arguments) always emit: they cannot
+        override a setting the user has not expressed, so suppressing
+        them would needlessly break scrutiny's own execution mode.
+        This preserves ``--no-cache``, ``--no-incremental``, and
+        similar pass-through controls even under ``pyproject_only``.
+
+        Parameters
+        ----------
+        scrutiny_key : str
+            Scrutiny-internal field name (e.g. ``"fix"``, ``"line_length"``).
+        pyproject_section : Optional[str]
+            Pyproject section name that would express the same setting
+            (e.g. ``"ruff"``, ``"ruff.lint"``).  ``None`` when the
+            setting has no pyproject equivalent and is purely a
+            scrutiny operational concern.
+        pyproject_native_key : Optional[str]
+            Native key within *pyproject_section* (e.g. ``"fix"``,
+            ``"exclude"``).  ``None`` with the same semantics as
+            *pyproject_section*.
+
+        Returns
+        -------
+        bool
+            ``True`` when the handler should emit the flag, ``False``
+            when the flag must be suppressed so the native source
+            remains authoritative.
+
+        """
+        # Explicit scrutiny CLI overrides always win; emit the flag.
+        if scrutiny_key in self.cli_override_keys:
+            return True
+        # Scrutiny-internal operational flags with no pyproject equivalent
+        # always emit; they cannot override a native setting the user has
+        # not expressed, so pyproject_only does not apply to them.
+        if pyproject_section is None or pyproject_native_key is None:
+            return True
+        # Pyproject-only mode suppresses every non-CLI flag that could
+        # otherwise shadow a pyproject setting the user may have set.
+        if self.pyproject_only:
+            return False
+        # Suppress when pyproject already defines the equivalent native key.
+        return (pyproject_section, pyproject_native_key) not in self.pyproject_native_pairs
+
 
 class _ToolConfigMixin:
     """
@@ -579,6 +930,11 @@ class RuffConfig(_ToolConfigMixin):
         Ruff rules to enable (from tier).
     ignore_rules : tuple[str, ...]
         Ruff rules to suppress.
+    extend_select_rules : tuple[str, ...]
+        Additional ruff rules emitted via ``--extend-select`` so they
+        supplement rather than override the user's pyproject select
+        list.  Populated with framework-specific rule families when
+        pyproject.toml owns the ``select`` list; empty otherwise.
     line_length : int
         Maximum line length.
     target_version : str
@@ -598,7 +954,8 @@ class RuffConfig(_ToolConfigMixin):
 
     select_rules: tuple[str, ...] = RUFF_RULES_STRICT
     ignore_rules: tuple[str, ...] = RUFF_IGNORE_RULES
-    line_length: int = UserDefaults.SCR_LINE_LENGTH.value
+    extend_select_rules: tuple[str, ...] = ()
+    line_length: int = int(UserDefaults.SCR_LINE_LENGTH.value)
     target_version: str = UserDefaults.SCR_PYTHON_VERSION.value
     fix: bool = UserDefaults.RUFF_FIX
     unsafe_fixes: bool = UserDefaults.RUFF_UNSAFE_FIXES
@@ -612,12 +969,16 @@ class RuffConfig(_ToolConfigMixin):
             self,
             "select_rules",
             "ignore_rules",
+            "extend_select_rules",
             "exclude_dirs",
             "exclude_files",
         )
         _SharedConfigValidator.validate_int_fields(
             self,
-            line_length={"min_value": 40, "max_value": 200},
+            line_length={
+                "min_value": TOOL_MIN_LINE_LENGTH,
+                "max_value": TOOL_MAX_LINE_LENGTH,
+            },
         )
         _SharedConfigValidator.validate_string_fields(
             self,
@@ -629,6 +990,19 @@ class RuffConfig(_ToolConfigMixin):
             "unsafe_fixes",
             "no_cache",
         )
+        # Rule tokens are comma-joined into ``--select=`` / ``--ignore=`` /
+        # ``--extend-select=`` payloads; reject any element that could
+        # smuggle additional flags through the subprocess boundary.
+        _SharedConfigValidator.validate_argv_safe_tuple(self, "select_rules")
+        _SharedConfigValidator.validate_argv_safe_tuple(self, "ignore_rules")
+        _SharedConfigValidator.validate_argv_safe_tuple(self, "extend_select_rules")
+        # target_version fills a ``--target-version={value}`` template;
+        # an ``=`` or leading dash in the value would chain a second flag.
+        _SharedConfigValidator.validate_argv_safe_string(self, "target_version")
+        # Exclusion paths pass as bare argv elements; paths that start with
+        # a dash would be misread as flags by the downstream tool.
+        _SharedConfigValidator.validate_path_safe_tuple(self, "exclude_dirs")
+        _SharedConfigValidator.validate_path_safe_tuple(self, "exclude_files")
 
 
 @dataclass(frozen=True)
@@ -699,6 +1073,12 @@ class MypyConfig(_ToolConfigMixin):
             "exclude_dirs",
             "exclude_files",
         )
+        # python_version fills ``--python-version={value}``; reject argv-
+        # unsafe content that could chain additional flags.
+        _SharedConfigValidator.validate_argv_safe_string(self, "python_version")
+        # Exclusion paths pass as bare argv elements.
+        _SharedConfigValidator.validate_path_safe_tuple(self, "exclude_dirs")
+        _SharedConfigValidator.validate_path_safe_tuple(self, "exclude_files")
 
 
 @dataclass(frozen=True)
@@ -752,6 +1132,9 @@ class RadonConfig(_ToolConfigMixin):
             "exclude_dirs",
             "exclude_files",
         )
+        # Exclusion paths pass as bare argv elements.
+        _SharedConfigValidator.validate_path_safe_tuple(self, "exclude_dirs")
+        _SharedConfigValidator.validate_path_safe_tuple(self, "exclude_files")
 
 
 @dataclass(frozen=True)
@@ -800,3 +1183,9 @@ class BanditConfig(_ToolConfigMixin):
             "exclude_dirs",
             "exclude_files",
         )
+        # skip_tests is comma-joined into ``-s={value}``; reject elements
+        # that could inject further flags through the subprocess.
+        _SharedConfigValidator.validate_argv_safe_tuple(self, "skip_tests")
+        # Exclusion paths pass as bare argv elements.
+        _SharedConfigValidator.validate_path_safe_tuple(self, "exclude_dirs")
+        _SharedConfigValidator.validate_path_safe_tuple(self, "exclude_files")

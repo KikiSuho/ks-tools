@@ -50,6 +50,7 @@ _UD_TO_GC_RENAMES: dict[str, str] = {
     "SCR_GENERATE_CONFIG_IN_CWD": "generate_config_in_cwd",
     "SCR_INCLUDE_TEST_CONFIG": "include_test_config",
     "SCR_INCLUDE_TEST_PLUGINS": "include_test_plugins",
+    "SCR_TEST_CONFIG_ONLY": "test_config_only",
     "SCR_PYPROJECT_ONLY": "pyproject_only",
     "SCR_TOOL_TIMEOUT": "tool_timeout",
     "SCR_PARALLEL": "parallel",
@@ -112,8 +113,8 @@ class TestValidateIntFields:
 
     def test_rejects_value_above_maximum(self) -> None:
         """Raise SCRConfigurationError when int field is above max_value."""
-        with pytest.raises(SCRConfigurationError, match="must be <= 200"):
-            RuffConfig(line_length=500)
+        with pytest.raises(SCRConfigurationError, match="must be <= 500"):
+            RuffConfig(line_length=999)
 
     def test_rejects_bool_as_int(self) -> None:
         """Raise SCRConfigurationError when bool is passed for an int field."""

@@ -14,7 +14,7 @@ UserDefaultsSnapshot : Frozen dataclass snapshot of UserDefaults.
 Examples
 --------
 >>> UserDefaults.SCR_CONFIG_TIER.value
-'strict'
+'standard'
 
 """
 
@@ -106,6 +106,12 @@ class UserDefaults:
         Include pytest/coverage sections in generated pyproject.toml.
     SCR_INCLUDE_TEST_PLUGINS : bool
         Include test plugin config in generated pyproject.toml.
+    SCR_TEST_CONFIG_ONLY : bool
+        Restrict generation to test sections only, skipping the
+        normal ``[tool.ruff]`` / ``[tool.mypy]`` / ``[tool.bandit]``
+        sections.  Used by ``--generate-test-config`` to scope
+        generation to ``[tool.pytest.ini_options]`` and
+        ``[tool.coverage.*]`` on a fresh project.
     SCR_PYPROJECT_ONLY : bool
         When True, use pyproject.toml as the sole authoritative
         config source, bypassing script defaults (priorities 4-5).
@@ -121,8 +127,10 @@ class UserDefaults:
 
     """
 
-    # Quality tier
-    SCR_CONFIG_TIER: ConfigTier = ConfigTier.STRICT
+    # Quality tier.  ``STANDARD`` covers production-ready rules without the
+    # documentation / pylint / per-file overhead of ``STRICT``; users who
+    # want maximum rigor opt in via ``--strict`` or ``--insane``.
+    SCR_CONFIG_TIER: ConfigTier = ConfigTier.STANDARD
 
     # Shared tool settings
     SCR_PYTHON_VERSION: PythonVersion = PythonVersion.PY39
@@ -130,8 +138,10 @@ class UserDefaults:
     SCR_CLEAR_CACHE: bool = False
     SCR_NO_CACHE: bool = False
 
-    # Tool toggles
-    RUN_RUFF_FORMATTER: bool = True
+    # Tool toggles; read-only analyzers run by default.  File-modifying
+    # capabilities (``ruff_formatter``, ``ruff check --fix``) are opt-in
+    # so ``scrutiny`` never rewrites source without explicit user intent.
+    RUN_RUFF_FORMATTER: bool = False
     RUN_RUFF_LINTER: bool = True
     RUN_MYPY: bool = True
     RUN_RADON: bool = True
@@ -142,8 +152,9 @@ class UserDefaults:
     SECURITY_TOOL: SecurityTool = SecurityTool.BANDIT
     PIPELINE_SECURITY_TOOL: SecurityTool = SecurityTool.BANDIT
 
-    # Ruff behaviour
-    RUFF_FIX: bool = True
+    # Ruff behaviour.  Auto-fix is opt-in via ``--fix`` so analysis runs
+    # never silently modify the user's working tree.
+    RUFF_FIX: bool = False
     RUFF_UNSAFE_FIXES: bool = False
     RUFF_CHECK_ONLY: bool = False
     RUFF_FRAMEWORK: FrameworkSelection = FrameworkSelection.NONE
@@ -161,12 +172,16 @@ class UserDefaults:
     SCR_FILE_LOGGER_LEVEL: LoggerLevel = LoggerLevel.VERBOSE
     SCR_LOG_DISCOVERED_FILES: bool = True
 
-    # pyproject.toml generation
-    SCR_GENERATE_CONFIG: bool = True
+    # pyproject.toml generation; opt-in per invocation via --generate-config
+    # flags.  Scrutiny no longer modifies pyproject.toml unless the user
+    # explicitly asks; running ``scrutiny`` analyses the project without
+    # touching the config file, honoring whatever is already there.
+    SCR_GENERATE_CONFIG: bool = False
     SCR_OVERRIDE_CONFIG: bool = False
     SCR_GENERATE_CONFIG_IN_CWD: bool = False
     SCR_INCLUDE_TEST_CONFIG: bool = False
     SCR_INCLUDE_TEST_PLUGINS: bool = False
+    SCR_TEST_CONFIG_ONLY: bool = False
     SCR_PYPROJECT_ONLY: bool = False
 
     # Execution
@@ -222,6 +237,7 @@ class UserDefaults:
             scr_generate_config_in_cwd=cls.SCR_GENERATE_CONFIG_IN_CWD,
             scr_include_test_config=cls.SCR_INCLUDE_TEST_CONFIG,
             scr_include_test_plugins=cls.SCR_INCLUDE_TEST_PLUGINS,
+            scr_test_config_only=cls.SCR_TEST_CONFIG_ONLY,
             scr_pyproject_only=cls.SCR_PYPROJECT_ONLY,
             scr_tool_timeout=cls.SCR_TOOL_TIMEOUT,
             scr_parallel=cls.SCR_PARALLEL,
@@ -305,6 +321,10 @@ class UserDefaultsSnapshot:
         Include pytest/coverage sections in generated pyproject.toml.
     scr_include_test_plugins : bool
         Include test plugin config in generated pyproject.toml.
+    scr_test_config_only : bool
+        Restrict generation to test sections only, skipping the
+        normal ``[tool.ruff]`` / ``[tool.mypy]`` / ``[tool.bandit]``
+        sections.
     scr_pyproject_only : bool
         When True, use pyproject.toml as the sole authoritative config
         source, bypassing script defaults (priorities 4-5).
@@ -353,6 +373,7 @@ class UserDefaultsSnapshot:
     scr_generate_config_in_cwd: bool = UserDefaults.SCR_GENERATE_CONFIG_IN_CWD
     scr_include_test_config: bool = UserDefaults.SCR_INCLUDE_TEST_CONFIG
     scr_include_test_plugins: bool = UserDefaults.SCR_INCLUDE_TEST_PLUGINS
+    scr_test_config_only: bool = UserDefaults.SCR_TEST_CONFIG_ONLY
     scr_pyproject_only: bool = UserDefaults.SCR_PYPROJECT_ONLY
     scr_tool_timeout: ToolTimeout = UserDefaults.SCR_TOOL_TIMEOUT
     scr_parallel: bool = UserDefaults.SCR_PARALLEL

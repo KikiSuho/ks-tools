@@ -466,9 +466,14 @@ class TestCliToDispatchIntegration:
         config = resolver.build_global_config()
 
         tools = config.get_enabled_tools(ContextDetection.CLI)
+        # Disabling mypy via --no-mypy removes it from the enabled tool list.
         assert "mypy" not in tools
+        # --strict flag propagates through to the resolved config tier.
         assert config.config_tier == ConfigTier.STRICT
-        assert "ruff_formatter" in tools
+        # The linter runs by default; the formatter is off unless explicitly
+        # enabled (via --tool or by flipping RUN_RUFF_FORMATTER).
+        assert "ruff_linter" in tools
+        assert "ruff_formatter" not in tools
 
     def test_exit_code_from_mixed_tool_results(self) -> None:
         """Exit code reflects issues when no tools crashed."""

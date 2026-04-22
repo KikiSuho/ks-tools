@@ -115,13 +115,17 @@ class TestPrintHeader:
         assert "Timeout:" in combined
 
     def test_discovered_files_listed_when_flag_set(self) -> None:
-        """Discovered files are listed when log_discovered_files is True."""
+        """Discovered files are emitted at the detail level when the flag is True."""
+        # Arrange - discovered files listing flows through logger.detail so the
+        # file log (default VERBOSE) always captures it while the terminal
+        # surfaces it only at --detailed or --verbose.
         logger = MagicMock(spec=SCRLogger)
         logger.console_level = LoggerLevel.NORMAL
         config = make_global_config()
         root = Path("/project")
         files = [root / "a.py", root / "b.py"]
 
+        # Act
         print_header(
             logger,
             config,
@@ -133,8 +137,9 @@ class TestPrintHeader:
             log_discovered_files=True,
         )
 
-        header_texts = [str(c.args[0]) for c in logger.header.call_args_list]
-        combined = "\n".join(header_texts)
+        # Assert
+        detail_texts = [str(c.args[0]) for c in logger.detail.call_args_list]
+        combined = "\n".join(detail_texts)
         assert "Discovered 2 Python file(s)" in combined
 
 
@@ -276,27 +281,33 @@ class TestLogDiscoveredFilesEdgeCases:
 
     def test_single_file_renders_one_row(self) -> None:
         """A single file produces exactly one row plus the count line."""
+        # Arrange
         logger = MagicMock(spec=SCRLogger)
         root = Path("/project")
         files = [root / "single.py"]
 
+        # Act
         _log_discovered_files(logger, files, root, mi_ranks=None)
 
-        header_texts = [str(c.args[0]) for c in logger.header.call_args_list]
-        combined = "\n".join(header_texts)
+        # Assert
+        detail_texts = [str(c.args[0]) for c in logger.detail.call_args_list]
+        combined = "\n".join(detail_texts)
         assert "Discovered 1 Python file(s)" in combined
         assert "single.py" in combined
 
     def test_odd_file_count_balanced_columns(self) -> None:
         """Odd number of files produces balanced two-column layout."""
+        # Arrange
         logger = MagicMock(spec=SCRLogger)
         root = Path("/project")
-        files = [root / f"mod{i}.py" for i in range(3)]
+        files = [root / f"mod{index}.py" for index in range(3)]
 
+        # Act
         _log_discovered_files(logger, files, root, mi_ranks=None)
 
-        header_texts = [str(c.args[0]) for c in logger.header.call_args_list]
-        combined = "\n".join(header_texts)
+        # Assert
+        detail_texts = [str(c.args[0]) for c in logger.detail.call_args_list]
+        combined = "\n".join(detail_texts)
         assert "mod0.py" in combined
         assert "mod1.py" in combined
         assert "mod2.py" in combined
@@ -373,8 +384,12 @@ class TestPrintHeaderIntegration:
             pyproject_has_config=True,
         )
 
+        # Concatenate both header-level banner text and detail-level file
+        # listing so integration tests can assert on the full rendered run
+        # output regardless of the log method used internally.
         header_texts = [str(c.args[0]) for c in logger.header.call_args_list]
-        return "\n".join(header_texts)
+        detail_texts = [str(c.args[0]) for c in logger.detail.call_args_list]
+        return "\n".join((*header_texts, *detail_texts))
 
     def test_verbose_header_includes_banner(self) -> None:
         """Full verbose header includes banner with project name."""

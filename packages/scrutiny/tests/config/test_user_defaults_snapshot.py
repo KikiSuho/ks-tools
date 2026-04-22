@@ -78,15 +78,16 @@ class TestUserDefaultsToFrozen:
             snapshot.scr_config_tier = "MUTATED"  # type: ignore[misc]
 
     def test_snapshot_field_count(self) -> None:
-        """Verify the snapshot dataclass exposes exactly 31 fields."""
+        """Verify the snapshot dataclass exposes the expected field count."""
         # Arrange
         snapshot = UserDefaults.to_frozen()
+        expected_field_count = 36
 
         # Act
         fields = dataclasses.fields(snapshot)
 
         # Assert
-        assert len(fields) == 35
+        assert len(fields) == expected_field_count
 
     def test_snapshot_supports_dataclass_fields(self) -> None:
         """Verify dataclasses.fields returns field objects with correct names."""
@@ -122,6 +123,7 @@ class TestUserDefaultsToFrozen:
             "scr_generate_config_in_cwd",
             "scr_include_test_config",
             "scr_include_test_plugins",
+            "scr_test_config_only",
             "scr_pyproject_only",
             "scr_tool_timeout",
             "scr_parallel",

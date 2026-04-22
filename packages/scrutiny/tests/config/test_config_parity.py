@@ -49,6 +49,7 @@ _SNAPSHOT_TO_GLOBAL: dict[str, str] = {
     "scr_generate_config_in_cwd": "generate_config_in_cwd",
     "scr_include_test_config": "include_test_config",
     "scr_include_test_plugins": "include_test_plugins",
+    "scr_test_config_only": "test_config_only",
     "scr_pyproject_only": "pyproject_only",
     "scr_tool_timeout": "tool_timeout",
     "scr_parallel": "parallel",
@@ -69,6 +70,16 @@ _SNAPSHOT_TO_GLOBAL: dict[str, str] = {
 
 # GlobalConfig fields that are computed properties, not direct snapshot mappings.
 _GLOBAL_COMPUTED_FIELDS: frozenset[str] = frozenset({"effective_fix"})
+
+# GlobalConfig fields populated from runtime sources (CLI, pyproject.toml) rather than
+# UserDefaults.  They have no snapshot counterpart by design: the parity test must
+# exclude them so snapshot coverage is not falsely flagged as missing.
+_GLOBAL_RUNTIME_FIELDS: frozenset[str] = frozenset(
+    {
+        "cli_override_keys",
+        "pyproject_native_pairs",
+    },
+)
 
 
 @pytest.mark.unit
@@ -117,6 +128,9 @@ class TestConfigFieldParity:
 
         # Act; verify each GlobalConfig field has a snapshot counterpart
         for gf in global_fields:
+            # Runtime-only provenance fields intentionally have no snapshot entry.
+            if gf in _GLOBAL_RUNTIME_FIELDS:
+                continue
             snap_name = reverse_map.get(gf, gf)
             # Record any GlobalConfig field that has no snapshot counterpart
             if snap_name not in snapshot_fields:

@@ -17,9 +17,11 @@ class TestGetEnabledTools:
     """Test tool list generation from GlobalConfig run flags."""
 
     def test_all_tools_enabled_returns_full_list(self) -> None:
-        """Verify all five tools appear when all run flags are True."""
-        # Arrange
-        global_config = make_global_config()
+        """Verify all five tools appear when every run flag is explicitly True."""
+        # Arrange - scrutiny ships with ruff_formatter off by default, so the
+        # test must opt in explicitly to assert the full-list behavior.
+        expected_tool_count = 5
+        global_config = make_global_config(run_ruff_formatter=True)
 
         # Act
         tools = global_config.get_enabled_tools(ContextDetection.CLI)
@@ -29,7 +31,7 @@ class TestGetEnabledTools:
         assert "ruff_linter" in tools
         assert "mypy" in tools
         assert "radon" in tools
-        assert len(tools) == 5
+        assert len(tools) == expected_tool_count
 
     def test_disabled_ruff_omits_formatter_and_linter(self) -> None:
         """Verify disabling ruff removes both formatter and linter."""

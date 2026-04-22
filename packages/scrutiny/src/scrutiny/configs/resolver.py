@@ -39,7 +39,6 @@ from scrutiny.core.enums import (
     ConfigSource,
     ConfigTier,
     FrameworkSelection,
-    LineLength,
     LoggerLevel,
     LogLocation,
     PythonVersion,
@@ -59,6 +58,7 @@ from scrutiny.core.tool_data import (
     MYPY_TIER_SETTINGS,
     RADON_TEST_EXCLUSIONS,
     RADON_TIER_SETTINGS,
+    RUFF_FRAMEWORK_RULES,
     RUFF_SECURITY_RULES,
     build_ruff_rules,
 )
@@ -171,8 +171,20 @@ _GLOBAL_CONFIG_FIELDS: tuple[_FieldSpec, ...] = (
     _FieldSpec("run_mypy", "run_mypy", "run_mypy"),
     _FieldSpec("run_radon", "run_radon", "run_radon"),
     _FieldSpec("run_security", "run_security", "run_security"),
-    _FieldSpec("fix", "fix", "ruff_fix"),
-    _FieldSpec("unsafe_fixes", "unsafe_fixes", "ruff_unsafe_fixes"),
+    _FieldSpec(
+        "fix",
+        "fix",
+        "ruff_fix",
+        pyproject_tool="ruff",
+        pyproject_key="fix",
+    ),
+    _FieldSpec(
+        "unsafe_fixes",
+        "unsafe_fixes",
+        "ruff_unsafe_fixes",
+        pyproject_tool="ruff",
+        pyproject_key="unsafe_fixes",
+    ),
     _FieldSpec("no_cache", "no_cache", "scr_no_cache"),
     _FieldSpec("clear_cache", "clear_cache", "scr_clear_cache"),
     _FieldSpec("parallel", "parallel", "scr_parallel"),
@@ -181,6 +193,7 @@ _GLOBAL_CONFIG_FIELDS: tuple[_FieldSpec, ...] = (
     _FieldSpec("generate_config_in_cwd", "generate_config_in_cwd", "scr_generate_config_in_cwd"),
     _FieldSpec("include_test_config", "include_test_config", "scr_include_test_config"),
     _FieldSpec("include_test_plugins", "include_test_plugins", "scr_include_test_plugins"),
+    _FieldSpec("test_config_only", "test_config_only", "scr_test_config_only"),
     _FieldSpec("pyproject_only", "pyproject_only", "scr_pyproject_only"),
     _FieldSpec("log_discovered_files", "log_discovered_files", "scr_log_discovered_files"),
     _FieldSpec("log_dir", "log_dir", "scr_log_dir"),
@@ -195,11 +208,15 @@ _GLOBAL_CONFIG_FIELDS: tuple[_FieldSpec, ...] = (
         pyproject_tool="ruff",
         pyproject_key="python_version",
     ),
+    # line_length is resolved as a plain int so user-provided values from
+    # pyproject.toml or the scrutiny CLI are not rejected when they do not
+    # match a LineLength enum member.  Bounds are enforced by GlobalConfig
+    # validation; scrutiny's own LineLength enum members remain the source
+    # of script defaults and are unwrapped to int by build_global_config.
     _FieldSpec(
         "line_length",
         "line_length",
         "scr_line_length",
-        enum_class=LineLength,
         pyproject_tool="ruff",
         pyproject_key="line_length",
     ),
@@ -268,6 +285,161 @@ _GLOBAL_CONFIG_FIELDS: tuple[_FieldSpec, ...] = (
         context_key="ctx_check_only",
     ),
 )
+
+
+def _coerce_line_length(raw_value: Any) -> int:
+    """
+    Convert a resolved line_length value to a plain ``int``.
+
+    Parameters
+    ----------
+    raw_value : Any
+        Value resolved from the priority chain.  Script defaults arrive
+        as ``LineLength`` IntEnum members; pyproject and CLI values
+        arrive as raw integers; any other type is rejected.
+
+    Returns
+    -------
+    int
+        Plain integer suitable for storage on ``GlobalConfig``.
+
+    Raises
+    ------
+    SCRUserInputError
+        If *raw_value* is not an integer-compatible value.
+
+    """
+    # Booleans are technically int in Python but meaningless here; reject them.
+    if isinstance(raw_value, bool):
+        raise SCRUserInputError(
+            f"line_length must be int, got bool: {raw_value!r}",
+        )
+    # Accept any int (including IntEnum members); coerce to plain int.
+    if isinstance(raw_value, int):
+        return int(raw_value)
+    raise SCRUserInputError(
+        f"line_length must be int, got {type(raw_value).__name__}: {raw_value!r}",
+    )
+
+
+def _resolve_ruff_select(
+    select_result: EffectiveValue,
+    framework_rules: tuple[str, ...],
+    *,
+    is_pyproject_only: bool,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """
+    Split the resolved ``select`` into a base list and an extend list.
+
+    When pyproject.toml provides ``[tool.ruff.lint] select``, the returned
+    ``select_rules`` mirrors the user's list verbatim and scrutiny's
+    framework-specific rule families are placed into ``extend_select_rules``.
+    Handlers emit the latter via ``--extend-select`` so framework rules are
+    additive rather than an override of the user's list.  When pyproject
+    does not provide ``select``, framework rules are folded into
+    ``select_rules`` as before and ``extend_select_rules`` is empty.
+
+    Parameters
+    ----------
+    select_result : EffectiveValue
+        Result of resolving ``select_rules`` through the priority chain.
+    framework_rules : tuple[str, ...]
+        Framework-specific rule families derived from the scrutiny
+        framework selection (may be empty when no framework is active).
+    is_pyproject_only : bool
+        When True, pyproject is the sole authoritative source; scrutiny
+        defaults are skipped and framework rules are additive even when
+        pyproject does not provide ``select``.
+
+    Returns
+    -------
+    tuple[tuple[str, ...], tuple[str, ...]]
+        ``(select_rules, extend_select_rules)`` pair.
+
+    """
+    # When pyproject provides select, keep it authoritative and make
+    # framework rules additive via --extend-select.
+    if select_result.source == ConfigSource.PYPROJECT:
+        return tuple(select_result.value), framework_rules
+    # In pyproject-only mode without a pyproject select, scrutiny emits
+    # nothing for select.  Framework rules are still populated so that a
+    # user passing ``--framework=<name>`` on the scrutiny CLI still gets
+    # them via ``--extend-select``; the handler gate suppresses them
+    # otherwise because ``pyproject_only`` blocks non-CLI emissions that
+    # could shadow a native setting.
+    if is_pyproject_only:
+        return (), framework_rules
+    # Fall back: the resolver already baked framework rules into script
+    # defaults, so select_result.value is the full merged list and no
+    # extend_select is needed on top of it.
+    return tuple(select_result.value), ()
+
+
+def _resolve_ruff_ignores(
+    ignore_result: EffectiveValue,
+    scrutiny_ignores: tuple[str, ...],
+    *,
+    is_pyproject_only: bool,
+) -> tuple[str, ...]:
+    """
+    Resolve the final ``ignore`` list under the pyproject-authoritative rule.
+
+    Parameters
+    ----------
+    ignore_result : EffectiveValue
+        Result of resolving ``ignore_rules`` through the priority chain.
+    scrutiny_ignores : tuple[str, ...]
+        Scrutiny-derived ignores (version-gated plus mypy overlap) that
+        apply only when pyproject does not express its own ignore list.
+    is_pyproject_only : bool
+        When True, pyproject is the sole authoritative source.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The final ignore-rules list to store on ``RuffConfig``.
+
+    """
+    # When pyproject provides ignores, honour them verbatim; the handler
+    # will suppress --ignore emission entirely so ruff reads the pyproject
+    # value natively.
+    if ignore_result.source == ConfigSource.PYPROJECT:
+        return tuple(ignore_result.value)
+    # In pyproject-only mode without a pyproject ignores list, scrutiny
+    # suppresses --ignore emission so no ignore list is materialised.
+    if is_pyproject_only:
+        return ()
+    return tuple(ignore_result.value) if ignore_result.value else scrutiny_ignores
+
+
+def _flatten_native_pairs(
+    native_keys_by_section: dict[str, frozenset[str]],
+) -> frozenset[tuple[str, str]]:
+    """
+    Flatten per-section native keys into ``(section, key)`` tuples.
+
+    The flat set supports O(1) membership tests by ``GlobalConfig.should_emit``
+    when deciding whether to suppress a scrutiny-built CLI flag.
+
+    Parameters
+    ----------
+    native_keys_by_section : dict[str, frozenset[str]]
+        Mapping from section name to the frozenset of native keys observed
+        in that section.
+
+    Returns
+    -------
+    frozenset[tuple[str, str]]
+        Flattened pair set ready for storage on ``GlobalConfig``.
+
+    """
+    pairs: set[tuple[str, str]] = set()
+    # Fan out each section's native keys into (section, key) tuples.
+    for section_name, native_keys in native_keys_by_section.items():
+        # Pair every native key with its section name.
+        for native_key in native_keys:
+            pairs.add((section_name, native_key))
+    return frozenset(pairs)
 
 
 class ContextDetection(Enum):
@@ -565,6 +737,7 @@ class ConfigResolver:
         tier: ConfigTier = ConfigTier.STRICT,
         pyproject_only: bool = False,
         snapshot: Optional[UserDefaultsSnapshot] = None,
+        pyproject_native_keys: Optional[dict[str, frozenset[str]]] = None,
     ) -> None:
         self._cli = cli_args
         self._pyproject = pyproject_config or {}
@@ -572,6 +745,10 @@ class ConfigResolver:
         self._tier = tier
         self._pyproject_only = pyproject_only
         self._snapshot: UserDefaultsSnapshot = snapshot or UserDefaults.to_frozen()
+        # Raw native keys observed in pyproject.toml tool sections.  Used by
+        # the execution layer to suppress scrutiny-built CLI flags when the
+        # user has already expressed the equivalent setting natively.
+        self._pyproject_native_keys: dict[str, frozenset[str]] = pyproject_native_keys or {}
 
     def _resolve_from_pyproject(
         self,
@@ -792,12 +969,30 @@ class ConfigResolver:
 
             resolved[spec.gc_field] = raw
 
+        # Coerce line_length to plain int.  Script defaults arrive as LineLength
+        # IntEnum members (which compare equal to ints but are not plain ints);
+        # pyproject and CLI values arrive as raw ints.  Bounds are enforced by
+        # GlobalConfig validation.
+        resolved["line_length"] = _coerce_line_length(resolved["line_length"])
+
         # Special case: config_tier uses self._tier, not snapshot.
         resolved["config_tier"] = self.resolve(
             cli_key="config_tier",
             script_default=self._tier,
             tool_default=self._tier,
         ).value
+
+        # Force the resolved pyproject_only to match the resolver's active mode
+        # so should_emit sees a consistent state.  Without this override a
+        # caller can pass pyproject_only=True to the resolver while the field
+        # spec resolves False from snapshot defaults, causing handlers to
+        # emit flags that the resolver itself has already suppressed.
+        resolved["pyproject_only"] = self._pyproject_only
+
+        # Attach provenance so the execution layer can honor the priority
+        # contract: CLI overrides win, then pyproject, then scrutiny defaults.
+        resolved["cli_override_keys"] = frozenset(self._cli.keys())
+        resolved["pyproject_native_pairs"] = _flatten_native_pairs(self._pyproject_native_keys)
 
         return GlobalConfig(**resolved)
 
@@ -823,20 +1018,25 @@ class ConfigResolver:
             Ruff-specific configuration.
 
         """
-        # Build effective select/ignore rules from tier + framework + version.
-        tier_rules, effective_ignores = build_ruff_rules(
+        # Build combined tier+framework select rules so non-pyproject
+        # resolutions still receive framework-specific families.  Framework
+        # rules are also captured separately so that when pyproject owns the
+        # select list they can flow into extend_select_rules as additive
+        # --extend-select payloads rather than overriding the user's list.
+        combined_tier_rules, effective_ignores = build_ruff_rules(
             global_config.config_tier,
             global_config.framework,
             global_config.python_version,
             global_config.run_mypy,
         )
+        framework_rules = RUFF_FRAMEWORK_RULES.get(global_config.framework.value, ())
 
         # Resolve select and ignore rules through the priority chain.
         select_result = self.resolve(
             pyproject_tool="ruff.lint",
             pyproject_key="select_rules",
-            script_default=tier_rules,
-            tool_default=tier_rules,
+            script_default=combined_tier_rules,
+            tool_default=combined_tier_rules,
         )
         ignore_result = self.resolve(
             pyproject_tool="ruff.lint",
@@ -845,34 +1045,29 @@ class ConfigResolver:
             tool_default=effective_ignores,
         )
 
-        # When pyproject_only is False and pyproject.toml provided the
-        # rule lists, merge script tier rules into pyproject values.
-        # pyproject.toml is the authoritative base (P2 beats P4);
-        # script tier rules only fill in rules absent from pyproject.
-        # dict.fromkeys preserves insertion order and deduplicates:
-        # pyproject rules go first so their positions are immutable.
-        if not self._pyproject_only:
-            if select_result.source == ConfigSource.PYPROJECT:
-                select_rules = tuple(
-                    dict.fromkeys((*select_result.value, *tier_rules)),
-                )
-            else:
-                select_rules = select_result.value
+        # Determine the final select list and any additive framework rules.
+        # When pyproject provides select, framework rules become extensions
+        # so the user's pyproject rule list stays authoritative; scrutiny's
+        # own tier rules are dropped on the floor in that case.
+        select_rules, extend_select_rules = _resolve_ruff_select(
+            select_result,
+            framework_rules,
+            is_pyproject_only=self._pyproject_only,
+        )
 
-            if ignore_result.source == ConfigSource.PYPROJECT:
-                ignore_rules = tuple(
-                    dict.fromkeys((*ignore_result.value, *effective_ignores)),
-                )
-            else:
-                ignore_rules = ignore_result.value
-        else:
-            select_rules = select_result.value
-            ignore_rules = ignore_result.value
+        # Ignore rules follow the same pyproject-authoritative contract:
+        # pyproject's list wins, scrutiny-derived ignores only fill the gap.
+        ignore_rules = _resolve_ruff_ignores(
+            ignore_result,
+            effective_ignores,
+            is_pyproject_only=self._pyproject_only,
+        )
 
         return RuffConfig(
             select_rules=select_rules,
             ignore_rules=ignore_rules,
-            line_length=global_config.line_length.value,
+            extend_select_rules=extend_select_rules,
+            line_length=global_config.line_length,
             target_version=global_config.python_version.value,
             fix=global_config.effective_fix,
             unsafe_fixes=global_config.unsafe_fixes,
@@ -1050,7 +1245,7 @@ class ConfigResolver:
         return RuffConfig(
             select_rules=RUFF_SECURITY_RULES,
             ignore_rules=(),
-            line_length=global_config.line_length.value,
+            line_length=global_config.line_length,
             target_version=global_config.python_version.value,
             fix=False,
             unsafe_fixes=False,

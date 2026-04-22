@@ -48,7 +48,10 @@ python -m scrutiny --insane src/
 
 ### `--tool <name>`
 
-Run only the specified tool. Repeatable for multiple tools.
+Run only the specified tool. Repeatable for multiple tools. An
+explicit ``--tool`` request overrides the per-tool run defaults, so
+capabilities that are off by default (``ruff_formatter``) are
+enabled when named here.
 
 ```bash
 # Ruff only (formatter + linter)
@@ -56,9 +59,13 @@ python -m scrutiny --tool ruff
 
 # Mypy and Radon only
 python -m scrutiny --tool mypy --tool radon
+
+# Force the formatter to run even though it is opt-in
+python -m scrutiny --tool ruff_formatter
 ```
 
-Valid names: `ruff`, `mypy`, `radon`, `bandit`, `ruff_security`.
+Valid names: `ruff`, `ruff_formatter`, `ruff_linter`, `mypy`, `radon`,
+`bandit`, `ruff_security`.
 
 ### `--no-ruff` / `--no-mypy` / `--no-radon` / `--no-security`
 
@@ -81,7 +88,9 @@ Override the security tool for CI/pipeline contexts. Default: `bandit`.
 
 ### `--fix`
 
-Enable Ruff auto-fix. Runs a three-pass strategy: check, fix, check remaining.
+Enable Ruff auto-fix. Scrutiny runs read-only by default; this flag
+opts into the three-pass strategy (check, fix, check remaining) that
+modifies files on disk.
 
 ```bash
 python -m scrutiny --fix
@@ -144,41 +153,69 @@ Add a file pattern to the exclusion list. Repeatable.
 
 ## Configuration Generation
 
-### `--generate-config`
+Scrutiny never modifies `pyproject.toml` unless you explicitly ask.
+Running `scrutiny` by itself only analyses your code. To bootstrap
+or update your config, use one of the opt-in flags below.
 
-Create or merge a `pyproject.toml` with tool configuration sections
-matching the active tier.
+`--generate-config` and `--generate-test-config` are mutually
+exclusive: pick one per invocation.
+
+### `--generate-config[=MODE]`
+
+Create or merge managed `pyproject.toml` sections. The optional
+`MODE` controls whether test configuration is included:
+
+- (no value) — `[tool.ruff]`, `[tool.mypy]`, `[tool.bandit]` only.
+- `=test` — above plus `[tool.pytest.ini_options]` and
+  `[tool.coverage.*]` (no plugin addopts).
+- `=all` — above plus pytest plugin addopts (pytest-cov, pytest-xdist).
 
 ```bash
-# Generate config at strict tier
+# Generate normal managed sections at strict tier
 python -m scrutiny --strict --generate-config
+
+# Generate managed + test sections (no plugin addopts)
+python -m scrutiny --generate-config=test
+
+# Generate everything (managed + test + plugin addopts)
+python -m scrutiny --generate-config=all
+```
+
+### `--generate-test-config[=MODE]`
+
+Generate only the test sections without touching `[tool.ruff]`,
+`[tool.mypy]`, or `[tool.bandit]`. Useful when your project already
+has those sections and you just want to add test configuration.
+
+- (no value) — `[tool.pytest.ini_options]` + `[tool.coverage.*]`.
+- `=plugins` — above plus pytest plugin addopts (pytest-cov,
+  pytest-xdist).
+
+```bash
+# Add only test config to a project that already has ruff/mypy/bandit
+python -m scrutiny --generate-test-config
+
+# Add test config with plugin addopts
+python -m scrutiny --generate-test-config=plugins
 ```
 
 ### `--override-config`
 
-With `--generate-config`: overwrite existing `[tool.*]` sections
-instead of merging missing keys only.
+With `--generate-config`: overwrite existing managed `[tool.*]`
+sections instead of merging missing keys only. Has no effect on test
+sections.
 
 ### `--config-in-cwd`
 
 With `--generate-config`: write to the current directory instead of
 the discovered project root.
 
-### `--include-test-config`
-
-Include `[tool.pytest.ini_options]` and `[tool.coverage.*]` sections
-in the generated pyproject.toml.
-
-### `--include-test-plugins`
-
-With `--include-test-config`: add pytest-cov, pytest-xdist,
-required_plugins, and duration reporting.
-
 ### `--pyproject-only`
 
 Use pyproject.toml as the sole configuration source, bypassing script
 defaults (priorities 4-5 in the resolution chain). CLI arguments still
-take precedence.
+take precedence. Operational flags with no pyproject equivalent
+(`--no-cache`, JSON output) are emitted regardless.
 
 ## Code Style
 

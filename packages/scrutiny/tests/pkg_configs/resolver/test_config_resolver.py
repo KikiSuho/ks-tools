@@ -269,15 +269,42 @@ class TestConfigResolverBuildRuffConfig:
         assert ruff_config.select_rules == RUFF_RULES_ESSENTIAL
 
     def test_appends_framework_rules(self) -> None:
-        """Verify framework overlay appends rules to the tier set."""
+        """Framework rules are folded into select_rules when pyproject has no select."""
+        # Arrange
         global_config = make_global_config(
             config_tier=ConfigTier.STRICT,
             framework=FrameworkSelection.DJANGO,
         )
         resolver = ConfigResolver(cli_args={})
+
+        # Act
         ruff_config = resolver.build_ruff_config(global_config)
-        # Django adds "DJ" to the rule set.
+
+        # Assert - without a pyproject select, framework rules are inside
+        # select_rules and extend_select_rules stays empty.
         assert "DJ" in ruff_config.select_rules
+        assert ruff_config.extend_select_rules == ()
+
+    def test_framework_rules_become_extend_select_when_pyproject_has_select(self) -> None:
+        """Framework rules are emitted via --extend-select when pyproject owns select."""
+        # Arrange
+        global_config = make_global_config(
+            config_tier=ConfigTier.STRICT,
+            framework=FrameworkSelection.DJANGO,
+        )
+        resolver = ConfigResolver(
+            cli_args={},
+            pyproject_config={"ruff.lint": {"select_rules": ("E", "F")}},
+        )
+
+        # Act
+        ruff_config = resolver.build_ruff_config(global_config)
+
+        # Assert - pyproject's select list is authoritative; framework rules
+        # flow into extend_select_rules so they supplement rather than override.
+        assert ruff_config.select_rules == ("E", "F")
+        assert "DJ" in ruff_config.extend_select_rules
+        assert "DJ" not in ruff_config.select_rules
 
     def test_adds_mypy_overlap_when_mypy_enabled(self) -> None:
         """Verify mypy overlap ignores are included when mypy is enabled."""

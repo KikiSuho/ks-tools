@@ -131,7 +131,7 @@ class TestFieldSpecBuildGlobalConfig:
 
         assert config.parallel == snapshot.scr_parallel
         assert config.python_version == PythonVersion(snapshot.scr_python_version)
-        assert config.line_length == LineLength(snapshot.scr_line_length)
+        assert config.line_length == int(snapshot.scr_line_length.value)
 
     def test_cli_override_flows_through_field_spec_loop(self) -> None:
         """CLI args override snapshot defaults via the _FieldSpec loop."""
@@ -160,7 +160,7 @@ class TestFieldSpecBuildGlobalConfig:
         )
         config = resolver.build_global_config()
 
-        assert config.line_length == LineLength(_PYPROJECT_LINE_LENGTH)
+        assert config.line_length == _PYPROJECT_LINE_LENGTH
 
     def test_enum_construction_error_raises_correct_exception(self) -> None:
         """Invalid enum value in CLI raises the specified exception type."""
@@ -587,8 +587,9 @@ class TestFieldSpecToToolDispatchChain:
         tools = config.get_enabled_tools(ContextDetection.CLI)
         assert "mypy" not in tools
 
-    def test_pyproject_enum_override_through_fieldspec(self) -> None:
-        """Pyproject line_length override flows through _FieldSpec enum construction."""
+    def test_pyproject_line_length_resolves_as_plain_int(self) -> None:
+        """Pyproject line_length flows through the priority chain as an int."""
+        # Arrange
         snapshot = UserDefaults.to_frozen()
         resolver = ConfigResolver(
             cli_args={},
@@ -597,10 +598,14 @@ class TestFieldSpecToToolDispatchChain:
             tier=snapshot.scr_config_tier,
             snapshot=snapshot,
         )
+
+        # Act
         config = resolver.build_global_config()
 
-        assert config.line_length == LineLength(_PYPROJECT_LINE_LENGTH)
-        assert config.line_length.value == _PYPROJECT_LINE_LENGTH
+        # Assert - scrutiny no longer coerces line_length through LineLength so
+        # user-provided values outside the enum are accepted verbatim.
+        assert config.line_length == _PYPROJECT_LINE_LENGTH
+        assert isinstance(config.line_length, int)
 
 
 @pytest.mark.integration

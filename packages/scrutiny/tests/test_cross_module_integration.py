@@ -134,9 +134,11 @@ class TestSnapshotToConfigResolution:
         ide_tools = config.get_enabled_tools(ContextDetection.IDE)
         ci_tools = config.get_enabled_tools(ContextDetection.CI)
 
-        # Both should include core tools
-        assert "ruff_formatter" in ide_tools
-        # Security tool differs by context
+        # Both contexts should include the linter (a core read-only analyzer
+        # that runs by default).
+        assert "ruff_linter" in ide_tools
+        assert "ruff_linter" in ci_tools
+        # Security tool differs by context.
         assert "bandit" in ide_tools
         assert "ruff_security" in ci_tools
 
@@ -320,8 +322,8 @@ class TestLogDiscoveredFiles:
 
         _log_discovered_files(logger, files, root, mi_ranks=None)
 
-        header_texts = [call.args[0] for call in logger.header.call_args_list]
-        combined = "\n".join(header_texts)
+        detail_texts = [call.args[0] for call in logger.detail.call_args_list]
+        combined = "\n".join(detail_texts)
 
         assert "Discovered 3 Python file(s)" in combined
         assert "a.py" in combined
@@ -337,8 +339,8 @@ class TestLogDiscoveredFiles:
 
         _log_discovered_files(logger, files, root, mi_ranks=mi_ranks)
 
-        header_texts = [call.args[0] for call in logger.header.call_args_list]
-        combined = "\n".join(header_texts)
+        detail_texts = [call.args[0] for call in logger.detail.call_args_list]
+        combined = "\n".join(detail_texts)
 
         assert "module.py [C]" in combined
 
