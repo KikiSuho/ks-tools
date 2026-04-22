@@ -13,10 +13,10 @@ everywhere.
 
 ```bash
 # All tools
-pip install ks-scrutiny[all]
+pip install 'ks-scrutiny[all]'
 
 # Specific tools only
-pip install ks-scrutiny[ruff,mypy]
+pip install 'ks-scrutiny[ruff,mypy]'
 
 # Core package only (install tools separately)
 pip install ks-scrutiny
