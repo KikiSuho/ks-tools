@@ -209,3 +209,48 @@ class TestParseCLIToDict:
         result = parse_cli_to_dict(args)
 
         assert "log_location" not in result
+
+    def test_current_dir_as_root_sets_true(self) -> None:
+        """Set current_dir_as_root to True when --current-dir-as-root is passed."""
+        # Arrange
+        parser = create_argument_parser()
+        args = parser.parse_args(["--current-dir-as-root"])
+
+        # Act
+        result = parse_cli_to_dict(args)
+
+        # Assert
+        assert result["current_dir_as_root"] is True
+
+    def test_no_current_dir_as_root_sets_false(self) -> None:
+        """Set current_dir_as_root to False when --no-current-dir-as-root is passed."""
+        # Arrange
+        parser = create_argument_parser()
+        args = parser.parse_args(["--no-current-dir-as-root"])
+
+        # Act
+        result = parse_cli_to_dict(args)
+
+        # Assert
+        assert result["current_dir_as_root"] is False
+
+    def test_current_dir_as_root_absent_by_default(self) -> None:
+        """Omit current_dir_as_root from dict when neither flag is passed."""
+        # Arrange
+        parser = create_argument_parser()
+        args = parser.parse_args([])
+
+        # Act
+        result = parse_cli_to_dict(args)
+
+        # Assert
+        assert "current_dir_as_root" not in result
+
+    def test_current_dir_as_root_flags_are_mutually_exclusive(self) -> None:
+        """Reject passing both --current-dir-as-root and --no-current-dir-as-root."""
+        # Arrange
+        parser = create_argument_parser()
+
+        # Act / Assert
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--current-dir-as-root", "--no-current-dir-as-root"])

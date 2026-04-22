@@ -741,6 +741,104 @@ class TestOverrideIntegration:
         assert "skipped" in result
         assert pyproject.read_text(encoding="utf-8") == original_content
 
+    @pytest.mark.skipif(
+        tomllib is None or tomli_w is None,
+        reason="tomllib and tomli_w required for key-level override",
+    )
+    def test_override_replaces_test_sections_when_include_test_config_enabled(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Override with include_test_config replaces stale pytest/coverage values."""
+        # Arrange
+        params = _build_gen_config(
+            override_config=True,
+            include_test_config=True,
+            include_test_plugins=True,
+        )
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            "[tool.pytest.ini_options]\n"
+            'minversion = "5.0"\n'
+            'testpaths = ["old_tests"]\n'
+            "\n"
+            "[tool.coverage.run]\n"
+            'source = ["old_src"]\n',
+            encoding="utf-8",
+        )
+
+        # Act
+        result = PyProjectGenerator.generate_or_merge(tmp_path, params)
+
+        # Assert
+        assert result == "updated"
+        parsed = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        # Stale pytest values were replaced, not preserved
+        assert parsed["tool"]["pytest"]["ini_options"]["testpaths"] != ["old_tests"]
+        assert "addopts" in parsed["tool"]["pytest"]["ini_options"]
+        assert "required_plugins" in parsed["tool"]["pytest"]["ini_options"]
+        # Stale coverage values were replaced
+        assert parsed["tool"]["coverage"]["run"]["source"] != ["old_src"]
+
+    @pytest.mark.skipif(
+        tomllib is None or tomli_w is None,
+        reason="tomllib and tomli_w required for key-level override",
+    )
+    def test_override_writes_missing_coverage_report_when_include_test_config_enabled(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Override with include_test_config writes the coverage.report section when absent."""
+        # Arrange
+        params = _build_gen_config(
+            override_config=True,
+            include_test_config=True,
+        )
+        pyproject = tmp_path / "pyproject.toml"
+        # Existing file has coverage.run but not coverage.report
+        pyproject.write_text(
+            "[tool.coverage.run]\nbranch = false\n",
+            encoding="utf-8",
+        )
+
+        # Act
+        result = PyProjectGenerator.generate_or_merge(tmp_path, params)
+
+        # Assert
+        assert result == "updated"
+        parsed = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        assert "report" in parsed["tool"]["coverage"]
+
+    @pytest.mark.skipif(
+        tomllib is None or tomli_w is None,
+        reason="tomllib and tomli_w required for key-level override",
+    )
+    def test_override_without_include_test_config_leaves_existing_pytest_alone(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Override scoped to managed tools does not touch pre-existing pytest config."""
+        # Arrange
+        params = _build_gen_config(override_config=True)
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            "[tool.ruff]\nline-length = 50\n"
+            "\n"
+            "[tool.pytest.ini_options]\n"
+            'minversion = "5.0"\n',
+            encoding="utf-8",
+        )
+
+        # Act
+        PyProjectGenerator.generate_or_merge(tmp_path, params)
+
+        # Assert
+        parsed = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        # Ruff section was overridden by generation
+        assert parsed["tool"]["ruff"]["line-length"] != 50
+        # Pytest section untouched because it was not in the generated content
+        assert parsed["tool"]["pytest"]["ini_options"]["minversion"] == "5.0"
+
 
 # ── Version-Gated Ignores ── #
 

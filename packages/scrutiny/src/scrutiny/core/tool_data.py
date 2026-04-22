@@ -26,7 +26,6 @@ BANDIT_LEVEL_FLAGS : Severity/confidence level to CLI flag character.
 BANDIT_SEVERITY_RANK : Numeric ordering for threshold comparison.
 PYPROJECT_TEMPLATES : Tool section templates for pyproject.toml generation.
 PYPROJECT_KEY_MAP : Tool section key mappings for pyproject.toml reading.
-MANAGED_TOOL_NAMES : Top-level tool names managed by this script.
 PYTEST_TIER_MAP : Maps test tier labels to pytest settings.
 COVERAGE_TIER_MAP : Maps test tier labels to coverage settings.
 PYTEST_PLUGIN_ADDOPTS : Additional pytest flags for plugin mode.
@@ -562,11 +561,6 @@ PYPROJECT_TEMPLATES: dict[str, dict[str, Any]] = {
         "skips": "{skip_tests}",
     },
 }
-
-# Top-level tool names managed by this script.
-# Derived from PYPROJECT_TEMPLATES keys; subsections like "ruff.lint"
-# fall under their parent "ruff".
-MANAGED_TOOL_NAMES: frozenset[str] = frozenset(key.split(".")[0] for key in PYPROJECT_TEMPLATES)
 
 
 # ====================================== #

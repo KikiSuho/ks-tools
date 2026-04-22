@@ -5,6 +5,46 @@ All notable changes to `ks-scrutiny` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] - 2026-04-21
+
+Patch release. Adds the missing positive form of `--current-dir-as-root`,
+fixes `--override-config` so it covers test sections, and retires an
+internal constant that no longer has a caller.
+
+### Added
+
+- **`--current-dir-as-root` CLI flag** (positive form). Previously only
+  `--no-current-dir-as-root` existed, which was a no-op given the
+  `False` default and left users no CLI path to enable CWD-as-root for
+  a single invocation. The two flags now live in a mutually exclusive
+  argparse group, so passing both raises an argparse error at parse
+  time rather than letting extractor precedence silently decide the
+  winner.
+
+### Fixed
+
+- **`scrutiny --generate-config=all --override-config` now overwrites
+  `[tool.pytest.ini_options]` and `[tool.coverage.*]` sections.**
+  Previously `PyProjectGenerator._override_key_level` iterated a
+  hard-coded set of managed tools (`ruff`, `mypy`, `bandit`) and
+  skipped pytest and coverage entirely. Stale test settings were
+  preserved on override and `[tool.coverage.report]` was dropped when
+  absent from the existing file. The override now walks whatever
+  top-level `[tool.*]` sections appear in the generated TOML, so test
+  sections are included iff the user asked for them via
+  `--generate-config=test` / `=all` or
+  `--generate-test-config[=plugins]`. Non-generated tool sections
+  (including any unmanaged `[tool.*]`) remain untouched.
+
+### Internal
+
+- Removed the unused `MANAGED_TOOL_NAMES` constant from
+  `core/tool_data.py`. `PyProjectGenerator._render_templates` is now
+  the authoritative scope of what `--override-config` will replace.
+  See `ROADMAP.md` Phase 2 blocker #3 for how this interacts with a
+  future `[tool.scrutiny]` section.
+
+
 ## [4.0.0] - 2026-04-22
 
 Major release with **breaking behaviour changes**, a fix for a priority-chain

@@ -1,8 +1,8 @@
 # Roadmap
 
-Planned work beyond the 4.0.0 release. Each section lists concrete
+Planned work beyond the 4.0.1 release. Each section lists concrete
 items with enough context to pick them up cold. File/line references
-are current as of 4.0.0 and may drift; re-locate by symbol when
+are current as of 4.0.1 and may drift; re-locate by symbol when
 starting the work.
 
 ---
@@ -36,12 +36,19 @@ installed package source.
    `PYPROJECT_NATIVE_KEY_MAP` vs a derived `SCRUTINY_PYPROJECT_KEYS`
    (auto-generated from `UserDefaultsSnapshot` fields to prevent drift).
 
-3. **`MANAGED_TOOL_NAMES` comes from `PYPROJECT_TEMPLATES.keys()`**
-   (`core/tool_data.py:569`). If `[tool.scrutiny]` is added to templates
-   for generation, it also becomes subject to `--override-config` logic
-   in `PyProjectGenerator._override_key_level`, which is probably undesired.
-   Decouple the "what we manage" set from the "what we can override"
-   set.
+3. **`_render_templates` is the authoritative `--override-config` scope.**
+   As of 4.0.1, `PyProjectGenerator._override_key_level` walks whatever
+   top-level `[tool.*]` keys appear in the generated TOML and replaces
+   each. There is no longer a separate `MANAGED_TOOL_NAMES` gate. If
+   `[tool.scrutiny]` is added to `PYPROJECT_TEMPLATES` for bootstrap
+   generation, it automatically becomes subject to `--override-config`
+   too, which is probably undesired (users will hand-edit that section
+   between runs). Decide the intended semantics before adding a
+   template: either keep `[tool.scrutiny]` out of generation entirely
+   and document hand-editing, or add a render-time flag that excludes
+   specific tool keys from the override walk while still emitting them
+   on initial creation. The former is simpler; the latter preserves
+   the "one generator bootstraps every managed section" story.
 
 4. **`_SharedConfigValidator` needs enum-string coercion.**
    `validate_enum_field` checks `isinstance`; a raw string `"standard"`

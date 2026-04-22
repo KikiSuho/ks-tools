@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, Any, Optional
 from scrutiny.core.exceptions import SCRConfigurationError
 from scrutiny.core.tool_data import (
     COVERAGE_TIER_MAP,
-    MANAGED_TOOL_NAMES,
     MYPY_TIER_SETTINGS,
     PYPROJECT_KEY_MAP,
     PYPROJECT_TEMPLATES,
@@ -459,12 +458,15 @@ class PyProjectGenerator:
         generated_content: str,
     ) -> str:
         """
-        Override only managed tool sections, preserving unmanaged ones.
+        Override tool sections that appear in the generated content.
 
         Parse both the existing file and generated content as TOML.
-        Replace managed tool sections entirely with generated versions
-        while keeping all unmanaged tool sections and non-tool content
-        intact.
+        Replace each top-level ``[tool.<name>]`` section that appears in
+        the generated output, leaving any tool sections not in the
+        generated output and all non-tool content intact.  The set of
+        overwritten sections is scoped by ``_render_templates``; with
+        ``include_test_config`` enabled that includes pytest and
+        coverage in addition to ruff, mypy, and bandit.
 
         Parameters
         ----------
@@ -494,18 +496,18 @@ class PyProjectGenerator:
         gen_tools = generated_data.get("tool", {})
         ext_tools = existing_data.setdefault("tool", {})
 
-        # Overwrite each managed tool section if it differs from generated.
+        # Overwrite each generated tool section when it differs from existing;
+        # _render_templates is the authoritative scope so test sections are
+        # included iff the user requested them via include_test_config.
         changed = False
-        for tool_name in MANAGED_TOOL_NAMES:
-            # Skip tools not present in the generated config
-            if tool_name not in gen_tools:
+        for tool_name, gen_section in gen_tools.items():
+            # Skip when the existing section already matches the generated one
+            if ext_tools.get(tool_name) == gen_section:
                 continue
-            # Overwrite when the existing section differs from generated
-            if ext_tools.get(tool_name) != gen_tools[tool_name]:
-                ext_tools[tool_name] = gen_tools[tool_name]
-                changed = True
+            ext_tools[tool_name] = gen_section
+            changed = True
 
-        # Skip writing when no managed sections were changed.
+        # Skip writing when no sections changed.
         if not changed:
             return PyProjectGenerator.UNCHANGED
 

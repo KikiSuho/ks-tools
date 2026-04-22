@@ -215,8 +215,18 @@ def create_argument_parser() -> argparse.ArgumentParser:
         help="Override CI/pipeline security tool (bandit or ruff_security).",
     )
 
-    # Path behaviour
-    parser.add_argument(
+    # Path behaviour.  ``--current-dir-as-root`` and ``--no-current-dir-as-root``
+    # are mutually exclusive so argparse rejects conflicting intent at parse
+    # time rather than letting a silent precedence rule decide the winner.
+    current_dir_group = parser.add_mutually_exclusive_group()
+    current_dir_group.add_argument(
+        "--current-dir-as-root",
+        action="store_true",
+        default=None,
+        dest="current_dir_as_root",
+        help="Treat invocation directory as project root; skip upward search.",
+    )
+    current_dir_group.add_argument(
         "--no-current-dir-as-root",
         action="store_true",
         default=False,
@@ -772,6 +782,7 @@ def parse_cli_to_dict(args: argparse.Namespace) -> dict[str, Any]:
         "fix",
         "unsafe_fixes",
         "follow_symlinks",
+        "current_dir_as_root",
     )
     # Include boolean flags that the user explicitly set to True
     for attr in bool_flags:
