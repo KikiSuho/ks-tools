@@ -5,7 +5,7 @@ All notable changes to `ks-scrutiny` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.0.1] - 2026-04-21
+## [4.0.1] - 2026-04-22
 
 Patch release. Adds the missing positive form of `--current-dir-as-root`,
 fixes `--override-config` so it covers test sections, and retires an
